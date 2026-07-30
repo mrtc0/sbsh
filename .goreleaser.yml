@@ -1,0 +1,60 @@
+version: 2
+
+before:
+  hooks:
+    - make python-wasm
+    - go mod download
+
+builds:
+  - main: ./cmd/sbsh
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      # - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/mrtc0/sbsh/version.Version={{ .Version }}
+
+archives:
+  - formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+      - THIRD_PARTY_LICENSES
+      # The binary embeds CPython, so the archive carries the license texts that
+      # covers it. THIRD_PARTY_LICENSES above holds the same content in one file;
+      # these are the originals, unaltered.
+      - src: pywasm/dist/licenses/*
+        dst: licenses
+        strip_parent: true
+
+checksum:
+  name_template: 'checksums.txt'
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs(\(.+\))?:'
+      - '^test(\(.+\))?:'
+      - '^chore(\(.+\))?:'
+      - '^ci(\(.+\))?:'
+      - '^wip:'
+
+release:
+  draft: true
+  replace_existing_draft: true

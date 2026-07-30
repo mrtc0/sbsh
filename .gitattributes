@@ -1,0 +1,10 @@
+# The Python runtime under pywasm/dist/ is the output of pywasm/Dockerfile,
+# committed so that building this repository needs nothing but a Go toolchain.
+
+pywasm/dist/python.wasm binary
+pywasm/dist/lib/**/*.pyc binary
+
+# Vendored CPython standard library: keep it out of the repository's language
+# statistics, which would otherwise report sbsh as a Python project. Diffs stay
+# enabled on purpose — reading them is how a CPython bump gets reviewed.
+pywasm/dist/lib/** linguist-vendored
