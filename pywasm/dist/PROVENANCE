@@ -1,0 +1,4 @@
+cpython=v3.14.6
+wasi-sdk=33
+zlib=v1.3.2
+python.wasm.sha256=0de107195aba7b32ea3dd41ed9314c69dde69c75d888b28294fa7ee0386891c9
