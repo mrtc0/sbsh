@@ -25,6 +25,18 @@ func (f fakeResolver) LookupNetIP(_ context.Context, _, host string) ([]netip.Ad
 	return addrs, nil
 }
 
+// recordingResolver answers like the resolver it wraps and records the names it
+// was asked about, so that a test can pin which lookups happen at all.
+type recordingResolver struct {
+	inner fakeResolver
+	asked []string
+}
+
+func (r *recordingResolver) LookupNetIP(ctx context.Context, network, host string) ([]netip.Addr, error) {
+	r.asked = append(r.asked, host)
+	return r.inner.LookupNetIP(ctx, network, host)
+}
+
 // serverPointingAt starts a server on loopback and returns it together with a
 // resolver that maps every given name to its address, so a test can drive a
 // request for any host name at a server it controls.
@@ -116,6 +128,64 @@ func TestPolicy_HTTPClient(t *testing.T) {
 			body, err := io.ReadAll(res.Body)
 			require.NoError(t, err)
 			assert.Equal(t, "reached", string(body))
+		})
+	}
+}
+
+// TestPolicy_HTTPClientDoesNotResolveUnlistedNames pins when a name reaches the
+// resolver. A lookup leaves the host: the query carries whatever the name
+// encodes to the resolver and on to the name's authoritative server, so a name
+// that no entry could approve must be refused before it is resolved.
+//
+// With an address entry present the lookup is what the decision needs, and the
+// cases below pin that too rather than leaving it to follow from the first.
+func TestPolicy_HTTPClientDoesNotResolveUnlistedNames(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		entries   []string
+		host      string
+		wantAsked []string
+		wantReach bool
+	}{
+		"an unlisted name is refused before it is resolved": {
+			entries: []string{"example.com"},
+			host:    "secret.evil.com",
+		},
+		"an address entry is what makes resolving an unlisted name necessary": {
+			entries:   []string{"example.com", "127.0.0.1/32"},
+			host:      "secret.evil.com",
+			wantAsked: []string{"secret.evil.com"},
+		},
+		"a listed name is resolved": {
+			entries:   []string{"example.com"},
+			host:      "example.com",
+			wantAsked: []string{"example.com"},
+			wantReach: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, resolver, port := serverPointingAt(t, "example.com")
+			resolver["secret.evil.com"] = []netip.Addr{netip.MustParseAddr("203.0.113.1")}
+			recorder := &recordingResolver{inner: resolver}
+
+			p, err := New(tc.entries, WithResolver(recorder))
+			require.NoError(t, err)
+
+			res, err := p.HTTPClient().Get("http://" + net.JoinHostPort(tc.host, port))
+			if tc.wantReach {
+				require.NoError(t, err)
+				res.Body.Close()
+			} else {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, ErrNotAllowed)
+			}
+
+			assert.Equal(t, tc.wantAsked, recorder.asked)
 		})
 	}
 }
