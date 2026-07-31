@@ -47,6 +47,13 @@ func (p *Policy) dialContext(ctx context.Context, network, addr string) (net.Con
 		addrs = []netip.Addr{ip}
 	} else {
 		hostAllowed = p.hostListed(host)
+		// A lookup is itself a request that leaves the host, carrying the name
+		// to the resolver and on to whoever answers for it. With no address
+		// entry there is no address the name could be authorized by, so
+		// resolving it would send it out to learn nothing.
+		if !hostAllowed && len(p.nets) == 0 {
+			return nil, fmt.Errorf("%w: %s is not in the allow list", ErrNotAllowed, host)
+		}
 		addrs, err = p.resolver.LookupNetIP(ctx, "ip", host)
 		if err != nil {
 			return nil, err
