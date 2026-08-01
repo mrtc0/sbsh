@@ -17,14 +17,14 @@ import (
 // the end. Which code that is belongs to the command, since GNU does not use one
 // value for all of them.
 type walkGuard struct {
-	env     *Env
+	inv     *Invocation
 	refused bool
 }
 
 // report writes err to stderr and records that the command's result is
 // incomplete, so it can end with a non-zero status once its work is done.
 func (g *walkGuard) report(err error) {
-	fmt.Fprintf(g.env.HC.Stderr, "%s: %v\n", g.env.Name, err)
+	fmt.Fprintf(g.inv.Stderr, "%s: %v\n", g.inv.Name, err)
 	g.refused = true
 }
 

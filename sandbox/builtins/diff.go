@@ -15,21 +15,21 @@ const diffContext = 3
 //	diff [-u] file1 file2
 //
 // Only the unified format is produced; -u is accepted for compatibility.
-func diffCommand(_ context.Context, env *Env, args []string) error {
+func diffCommand(_ context.Context, inv *Invocation) error {
 	fs := NewFlagSet()
 	fs.Bool("-u") // unified format is the only output; accepted for compatibility
-	files, err := fs.Parse(args)
+	files, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
 	if len(files) != 2 {
 		return fmt.Errorf("usage: diff [-u] file1 file2")
 	}
-	a, err := readSource(env, files[0])
+	a, err := readSource(inv, files[0])
 	if err != nil {
 		return err
 	}
-	b, err := readSource(env, files[1])
+	b, err := readSource(inv, files[1])
 	if err != nil {
 		return err
 	}
@@ -38,10 +38,10 @@ func diffCommand(_ context.Context, env *Env, args []string) error {
 	if len(hunks) == 0 {
 		return nil
 	}
-	fmt.Fprintf(env.HC.Stdout, "--- %s\n", files[0])
-	fmt.Fprintf(env.HC.Stdout, "+++ %s\n", files[1])
+	fmt.Fprintf(inv.Stdout, "--- %s\n", files[0])
+	fmt.Fprintf(inv.Stdout, "+++ %s\n", files[1])
 	for _, h := range hunks {
-		fmt.Fprint(env.HC.Stdout, h)
+		fmt.Fprint(inv.Stdout, h)
 	}
 	return exit(1)
 }

@@ -347,7 +347,7 @@ func Test_readSource(t *testing.T) {
 				mustWrite(t, env.FS, path, body)
 			}
 			if tc.setStdin {
-				env.HC.Stdin = strings.NewReader(tc.stdin)
+				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
 			got, err := readSource(env, tc.path)

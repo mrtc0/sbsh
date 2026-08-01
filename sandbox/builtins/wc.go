@@ -8,12 +8,12 @@ import (
 
 // wc counts lines, words, and bytes. -l/-w/-c select what to count (all when unspecified).
 // With no arguments it reads stdin. For multiple files it prints a trailing total.
-func wc(_ context.Context, env *Env, args []string) error {
+func wc(_ context.Context, inv *Invocation) error {
 	fs := NewFlagSet()
 	showLinesFlag := fs.Bool("-l")
 	showWordsFlag := fs.Bool("-w")
 	showBytesFlag := fs.Bool("-c")
-	files, err := fs.Parse(args)
+	files, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -36,7 +36,7 @@ func wc(_ context.Context, env *Env, args []string) error {
 		if name != "" {
 			fmt.Fprintf(&b, " %s", name)
 		}
-		fmt.Fprintln(env.HC.Stdout, b.String())
+		fmt.Fprintln(inv.Stdout, b.String())
 	}
 
 	count := func(b []byte) (lines, words, bytes int) {
@@ -45,7 +45,7 @@ func wc(_ context.Context, env *Env, args []string) error {
 	}
 
 	if len(files) == 0 {
-		b, err := readSource(env, "-")
+		b, err := readSource(inv, "-")
 		if err != nil {
 			return err
 		}
@@ -56,7 +56,7 @@ func wc(_ context.Context, env *Env, args []string) error {
 
 	var totL, totW, totC int
 	for _, f := range files {
-		b, err := readSource(env, f)
+		b, err := readSource(inv, f)
 		if err != nil {
 			return err
 		}

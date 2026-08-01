@@ -9,17 +9,17 @@ import (
 // dirname prints the directory portion of each path argument, one per line.
 //
 //	dirname path...
-func dirname(_ context.Context, env *Env, args []string) error {
-	if len(args) == 0 {
+func dirname(_ context.Context, inv *Invocation) error {
+	if len(inv.Args) == 0 {
 		return fmt.Errorf("usage: dirname path...")
 	}
-	for _, p := range args {
+	for _, p := range inv.Args {
 		trimmed := stripTrailingSlashes(p)
 		if trimmed == "" {
-			fmt.Fprintln(env.HC.Stdout, "/")
+			fmt.Fprintln(inv.Stdout, "/")
 			continue
 		}
-		fmt.Fprintln(env.HC.Stdout, path.Dir(trimmed))
+		fmt.Fprintln(inv.Stdout, path.Dir(trimmed))
 	}
 	return nil
 }

@@ -54,10 +54,11 @@ func Test_wc(t *testing.T) {
 				mustWrite(t, env.FS, path, body)
 			}
 			if tc.stdin != "" {
-				env.HC.Stdin = strings.NewReader(tc.stdin)
+				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			require.NoError(t, wc(context.Background(), env, tc.args))
+			env.Args = tc.args
+			require.NoError(t, wc(context.Background(), env))
 
 			if tc.wantLines > 0 {
 				lines := strings.Split(strings.TrimRight(stdout.String(), "\n"), "\n")

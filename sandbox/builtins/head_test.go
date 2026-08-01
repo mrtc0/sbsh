@@ -83,10 +83,11 @@ func Test_head(t *testing.T) {
 				mustWrite(t, env.FS, path, body)
 			}
 			if tc.stdin != "" {
-				env.HC.Stdin = strings.NewReader(tc.stdin)
+				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			err := head(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := head(context.Background(), env)
 			if tc.wantErr {
 				require.Error(t, err)
 				return

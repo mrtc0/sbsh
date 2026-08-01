@@ -66,7 +66,7 @@ func Test_walkGuard(t *testing.T) {
 			}
 
 			var visited []string
-			guard := &walkGuard{env: env}
+			guard := &walkGuard{inv: env}
 			err := afero.Walk(env.FS, "/work", guard.wrap(func(p string, info os.FileInfo, _ error) error {
 				if info.IsDir() {
 					return nil

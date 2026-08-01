@@ -4,8 +4,8 @@ import (
 	"context"
 )
 
-func cat(_ context.Context, env *Env, args []string) error {
-	paths, err := NewFlagSet().Parse(args)
+func cat(_ context.Context, inv *Invocation) error {
+	paths, err := NewFlagSet().Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -13,11 +13,11 @@ func cat(_ context.Context, env *Env, args []string) error {
 		paths = []string{"-"}
 	}
 	for _, p := range paths {
-		b, err := readSource(env, p)
+		b, err := readSource(inv, p)
 		if err != nil {
 			return err
 		}
-		if _, err := env.HC.Stdout.Write(b); err != nil {
+		if _, err := inv.Stdout.Write(b); err != nil {
 			return err
 		}
 	}

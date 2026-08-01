@@ -13,11 +13,11 @@ import (
 //
 //	-d decode / -w N wrap encoded output at N columns (0 disables wrapping)
 //	base64 [-d] [-w N] [file]
-func base64Command(_ context.Context, env *Env, args []string) error {
+func base64Command(_ context.Context, inv *Invocation) error {
 	fs := NewFlagSet()
 	decodeFlag := fs.Bool("-d", "--decode")
 	wrapFlag := fs.String("76", "-w", "--wrap")
-	files, err := fs.Parse(args)
+	files, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -33,7 +33,7 @@ func base64Command(_ context.Context, env *Env, args []string) error {
 	if len(files) == 1 {
 		src = files[0]
 	}
-	b, err := readSource(env, src)
+	b, err := readSource(inv, src)
 	if err != nil {
 		return err
 	}
@@ -50,13 +50,13 @@ func base64Command(_ context.Context, env *Env, args []string) error {
 		if err != nil {
 			return fmt.Errorf("invalid input: %w", err)
 		}
-		_, err = env.HC.Stdout.Write(out)
+		_, err = inv.Stdout.Write(out)
 		return err
 	}
 
 	encoded := base64.StdEncoding.EncodeToString(b)
 	if wrap <= 0 {
-		_, err := fmt.Fprintln(env.HC.Stdout, encoded)
+		_, err := fmt.Fprintln(inv.Stdout, encoded)
 		return err
 	}
 	for i := 0; i < len(encoded); i += wrap {
@@ -64,7 +64,7 @@ func base64Command(_ context.Context, env *Env, args []string) error {
 		if end > len(encoded) {
 			end = len(encoded)
 		}
-		if _, err := fmt.Fprintln(env.HC.Stdout, encoded[i:end]); err != nil {
+		if _, err := fmt.Fprintln(inv.Stdout, encoded[i:end]); err != nil {
 			return err
 		}
 	}

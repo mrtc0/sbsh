@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -62,11 +63,7 @@ func TestInvocation_Abs(t *testing.T) {
 func TestInvocation_Getenv(t *testing.T) {
 	t.Parallel()
 
-	set := map[string]string{"HOME": "/home/user", "EMPTY": ""}
-	inv := &command.Invocation{Env: func(name string) (string, bool) {
-		v, ok := set[name]
-		return v, ok
-	}}
+	inv := &command.Invocation{Env: testEnviron{"HOME": "/home/user", "EMPTY": ""}}
 	assert.Equal(t, "/home/user", inv.Getenv("HOME"))
 	assert.Equal(t, "", inv.Getenv("EMPTY"))
 	assert.Equal(t, "", inv.Getenv("MISSING"))
@@ -84,6 +81,23 @@ func TestExit(t *testing.T) {
 	require.True(t, errors.As(err, &exitErr))
 	assert.Equal(t, 3, exitErr.Code)
 	assert.Equal(t, "exit status 3", exitErr.Error())
+}
+
+// testEnviron is the environment a host would stub in to drive Run directly.
+type testEnviron map[string]string
+
+func (e testEnviron) Lookup(name string) (string, bool) {
+	v, ok := e[name]
+	return v, ok
+}
+
+func (e testEnviron) All() []string {
+	out := make([]string, 0, len(e))
+	for k, v := range e {
+		out = append(out, k+"="+v)
+	}
+	sort.Strings(out)
+	return out
 }
 
 type testWriter struct{ b []byte }

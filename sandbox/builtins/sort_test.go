@@ -59,10 +59,11 @@ func Test_sort(t *testing.T) {
 				mustWrite(t, env.FS, path, body)
 			}
 			if tc.seed == nil {
-				env.HC.Stdin = strings.NewReader(tc.stdin)
+				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			require.NoError(t, sortCommand(context.Background(), env, tc.args))
+			env.Args = tc.args
+			require.NoError(t, sortCommand(context.Background(), env))
 			assert.Equal(t, tc.want, stdout.String())
 		})
 	}

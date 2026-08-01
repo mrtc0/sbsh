@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // The recursive commands share one rule: a symbolic link found while walking is an
@@ -61,7 +63,8 @@ func TestFind_DoesNotFollowSymlinks(t *testing.T) {
 	env, hostDir, stdout, stderr := NewTestEnvWithHostMount(t, "find")
 	seedLinkTree(t, hostDir)
 
-	require.NoError(t, find(context.Background(), env, []string{"/work"}))
+	env.Args = []string{"/work"}
+	require.NoError(t, find(context.Background(), env))
 
 	got := strings.Fields(stdout.String())
 	assert.ElementsMatch(t, []string{
@@ -89,11 +92,13 @@ func TestRm_DoesNotFollowSymlinks(t *testing.T) {
 	env, hostDir, _, stderr := NewTestEnvWithHostMount(t, "rm")
 	seedLinkTree(t, hostDir)
 
-	require.NoError(t, rm(context.Background(), env, []string{"-r", "/work/dirlink"}))
+	env.Args = []string{"-r", "/work/dirlink"}
+	require.NoError(t, rm(context.Background(), env))
 	assert.NoFileExists(t, filepath.Join(hostDir, "dirlink"))
 	assert.FileExists(t, filepath.Join(hostDir, "sub/b.txt"), "the link's target must survive")
 
-	require.NoError(t, rm(context.Background(), env, []string{"-r", "/work/other"}))
+	env.Args = []string{"-r", "/work/other"}
+	require.NoError(t, rm(context.Background(), env))
 	assert.NoFileExists(t, filepath.Join(hostDir, "other/c.txt"))
 	assert.FileExists(t, filepath.Join(hostDir, "uplink"), "a link to a removed directory stays")
 
@@ -109,7 +114,8 @@ func TestGrep_DoesNotFollowSymlinks(t *testing.T) {
 	env, hostDir, stdout, stderr := NewTestEnvWithHostMount(t, "grep")
 	seedLinkTree(t, hostDir)
 
-	require.NoError(t, grep(context.Background(), env, []string{"-r", "match", "/work"}))
+	env.Args = []string{"-r", "match", "/work"}
+	require.NoError(t, grep(context.Background(), env))
 
 	got := strings.Fields(stdout.String())
 	assert.ElementsMatch(t, []string{
@@ -130,13 +136,15 @@ func TestCp_ReportsSymlinkItCannotCopy(t *testing.T) {
 	seedLinkTree(t, hostDir)
 	ctx := context.Background()
 
-	require.NoError(t, cp(ctx, env, []string{"-r", "/work/other", "/work/dst"}),
+	env.Args = []string{"-r", "/work/other", "/work/dst"}
+	require.NoError(t, cp(ctx, env),
 		"a tree with no link copies cleanly")
 	assert.FileExists(t, filepath.Join(hostDir, "dst/c.txt"))
 
-	err := cp(ctx, env, []string{"-r", "/work/sub", "/work/dst2"})
+	env.Args = []string{"-r", "/work/sub", "/work/dst2"}
+	err := cp(ctx, env)
 	require.Error(t, err)
-	assert.Equal(t, exitError{code: 1}, err)
+	assert.Equal(t, &command.ExitError{Code: 1}, err)
 	assert.Contains(t, stderr.String(), "cp: /work/sub/blink: symbolic link not copied")
 	assert.FileExists(t, filepath.Join(hostDir, "dst2/b.txt"), "the rest of the tree is copied")
 	assert.NoFileExists(t, filepath.Join(hostDir, "dst2/blink"))
@@ -150,7 +158,8 @@ func TestCp_FollowsSymlinkGivenAsArgument(t *testing.T) {
 	env, hostDir, _, stderr := NewTestEnvWithHostMount(t, "cp")
 	seedLinkTree(t, hostDir)
 
-	require.NoError(t, cp(context.Background(), env, []string{"-r", "/work/uplink", "/work/dst"}))
+	env.Args = []string{"-r", "/work/uplink", "/work/dst"}
+	require.NoError(t, cp(context.Background(), env))
 	assert.FileExists(t, filepath.Join(hostDir, "dst/c.txt"))
 	assert.Empty(t, stderr.String())
 }
@@ -163,7 +172,8 @@ func TestCp_RefusesToCopyIntoItself(t *testing.T) {
 	env, hostDir, _, _ := NewTestEnvWithHostMount(t, "cp")
 	seedLinkTree(t, hostDir)
 
-	err := cp(context.Background(), env, []string{"-r", "/work/sub", "/work/sub/inner"})
+	env.Args = []string{"-r", "/work/sub", "/work/sub/inner"}
+	err := cp(context.Background(), env)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "into itself")
 }
@@ -176,13 +186,15 @@ func TestTar_ReportsSymlinkItCannotStore(t *testing.T) {
 	env, hostDir, stdout, stderr := NewTestEnvWithHostMount(t, "tar")
 	seedLinkTree(t, hostDir)
 
-	err := tarCommand(context.Background(), env, []string{"-cf", "/work/a.tar", "sub", "dirlink"})
+	env.Args = []string{"-cf", "/work/a.tar", "sub", "dirlink"}
+	err := tarCommand(context.Background(), env)
 	require.Error(t, err)
-	assert.Equal(t, exitError{code: 2}, err)
+	assert.Equal(t, &command.ExitError{Code: 2}, err)
 	assert.Contains(t, stderr.String(), "tar: /work/dirlink: symbolic link not archived")
 	assert.FileExists(t, filepath.Join(hostDir, "a.tar"))
 
 	stdout.Reset()
-	require.NoError(t, tarCommand(context.Background(), env, []string{"-tf", "/work/a.tar"}))
+	env.Args = []string{"-tf", "/work/a.tar"}
+	require.NoError(t, tarCommand(context.Background(), env))
 	assert.ElementsMatch(t, []string{"sub/", "sub/b.txt"}, strings.Fields(stdout.String()))
 }

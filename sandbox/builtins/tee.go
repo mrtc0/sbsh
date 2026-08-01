@@ -9,20 +9,20 @@ import (
 //
 //	-a append to the files instead of truncating them
 //	tee [-a] file...
-func tee(_ context.Context, env *Env, args []string) error {
+func tee(_ context.Context, inv *Invocation) error {
 	fs := NewFlagSet()
 	appendMode := fs.Bool("-a", "--append")
-	files, err := fs.Parse(args)
+	files, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
 
-	b, err := readSource(env, "-")
+	b, err := readSource(inv, "-")
 	if err != nil {
 		return err
 	}
 
-	if _, err := env.HC.Stdout.Write(b); err != nil {
+	if _, err := inv.Stdout.Write(b); err != nil {
 		return err
 	}
 
@@ -31,7 +31,7 @@ func tee(_ context.Context, env *Env, args []string) error {
 		flag = os.O_WRONLY | os.O_CREATE | os.O_APPEND
 	}
 	for _, f := range files {
-		file, err := env.FS.OpenFile(env.Abs(f), flag, 0o644)
+		file, err := inv.FS.OpenFile(inv.Abs(f), flag, 0o644)
 		if err != nil {
 			return err
 		}

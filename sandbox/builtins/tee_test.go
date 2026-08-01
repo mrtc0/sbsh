@@ -13,8 +13,9 @@ func Test_tee(t *testing.T) {
 	t.Parallel()
 
 	env, stdout, _ := NewTestEnv(t, "/work")
-	env.HC.Stdin = strings.NewReader("payload")
-	require.NoError(t, tee(context.Background(), env, []string{"a.txt", "b.txt"}))
+	env.Stdin = strings.NewReader("payload")
+	env.Args = []string{"a.txt", "b.txt"}
+	require.NoError(t, tee(context.Background(), env))
 
 	assert.Equal(t, "payload", stdout.String(), "stdout receives the input")
 	assert.Equal(t, "payload", mustRead(t, env.FS, "/work/a.txt"))
@@ -26,8 +27,9 @@ func Test_tee_truncatesByDefault(t *testing.T) {
 
 	env, _, _ := NewTestEnv(t, "/work")
 	mustWrite(t, env.FS, "/work/out", "old content")
-	env.HC.Stdin = strings.NewReader("new")
-	require.NoError(t, tee(context.Background(), env, []string{"out"}))
+	env.Stdin = strings.NewReader("new")
+	env.Args = []string{"out"}
+	require.NoError(t, tee(context.Background(), env))
 	assert.Equal(t, "new", mustRead(t, env.FS, "/work/out"))
 }
 
@@ -36,7 +38,8 @@ func Test_tee_append(t *testing.T) {
 
 	env, _, _ := NewTestEnv(t, "/work")
 	mustWrite(t, env.FS, "/work/out", "old")
-	env.HC.Stdin = strings.NewReader("+new")
-	require.NoError(t, tee(context.Background(), env, []string{"-a", "out"}))
+	env.Stdin = strings.NewReader("+new")
+	env.Args = []string{"-a", "out"}
+	require.NoError(t, tee(context.Background(), env))
 	assert.Equal(t, "old+new", mustRead(t, env.FS, "/work/out"))
 }

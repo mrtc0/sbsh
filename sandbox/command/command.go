@@ -4,8 +4,12 @@
 // it exactly like a builtin.
 //
 // The interface deliberately says nothing about the shell backend. A command
-// receives its arguments, its streams, the sandbox filesystem and the working
-// directory, and returns an error — which is all a builtin gets too.
+// receives its arguments, its streams, the environment, the sandbox filesystem
+// and the working directory, and returns an error.
+//
+// This is not a parallel mechanism beside the builtins: a builtin is a
+// [RunFunc] receiving the same [Invocation], so a custom command is the same
+// kind of thing as "grep", with the same reach and the same limits.
 package command
 
 import (
@@ -15,6 +19,7 @@ import (
 	"net/http"
 	"path"
 
+	"github.com/mrtc0/sbsh/sandbox/python"
 	"github.com/mrtc0/sbsh/vfs"
 )
 
@@ -32,9 +37,8 @@ type Command interface {
 	Run(ctx context.Context, inv *Invocation) error
 }
 
-// Invocation is everything a command is given for one call. It is the public
-// counterpart of what the builtins receive, with no reference to the shell
-// interpreter in it.
+// Invocation is everything a command is given for one call — the builtins
+// receive this very type, and nothing in it refers to the shell interpreter.
 //
 // Nothing in it is valid after Run returns: the streams belong to the shell,
 // which may be piping them into the next command of a pipeline.
@@ -58,15 +62,13 @@ type Invocation struct {
 	Stdout io.Writer
 	Stderr io.Writer
 
-	// Env looks up an environment variable as the script sees it, which includes
-	// the assignments written in front of the command itself ("LANG=C mycmd").
-	// The second result reports whether the variable is set, telling an unset
-	// variable apart from one set to the empty string.
+	// Env is the script's environment, which includes the assignments written in
+	// front of the command itself ("LANG=C mycmd").
 	//
 	// The sandbox always installs it; it is exported so a host can drive Run
 	// directly in its own tests. Prefer [Invocation.Getenv], which is also
 	// correct when it is nil.
-	Env func(name string) (value string, ok bool)
+	Env Environ
 
 	// FS is the sandbox filesystem, with the mounts resolved and the deny
 	// patterns in force. It implements afero.Fs, so afero's helpers apply. It is
@@ -79,6 +81,11 @@ type Invocation struct {
 	// it nil has no other way out: there is no unrestricted client to fall back
 	// on.
 	HTTP *http.Client
+
+	// Python runs Python code in the sandbox, the same interpreter the "python"
+	// command is. It is how a command reaches Python without an interpreter of
+	// its own; like FS and HTTP it stays inside the sandbox's limits.
+	Python python.Interpreter
 }
 
 // Abs resolves p against the working directory and normalizes it, giving the
@@ -91,13 +98,27 @@ func (inv *Invocation) Abs(p string) string {
 }
 
 // Getenv returns the value of the environment variable name, or the empty string
-// when it is unset. Use [Invocation.Env] directly to tell the two apart.
+// when it is unset. Use [Environ.Lookup] to tell the two apart.
 func (inv *Invocation) Getenv(name string) string {
 	if inv.Env == nil {
 		return ""
 	}
-	v, _ := inv.Env(name)
+	v, _ := inv.Env.Lookup(name)
 	return v
+}
+
+// Environ is the environment a command was invoked with. The sandbox implements
+// it over the shell's variables; a host driving [Command.Run] directly in a test
+// can pass any implementation, or leave [Invocation.Env] nil.
+type Environ interface {
+	// Lookup returns the value of name, and whether it is set at all — an unset
+	// variable is not the same as one set to the empty string.
+	Lookup(name string) (value string, ok bool)
+
+	// All returns the environment as "NAME=value" pairs, for handing to
+	// something that wants a whole environment rather than one variable. Only
+	// plain string variables appear: an array has no single value to render.
+	All() []string
 }
 
 // ExitError is how a command reports a non-zero exit status. Returning any

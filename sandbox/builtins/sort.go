@@ -13,13 +13,13 @@ import (
 //
 //	-r reverse / -n numeric / -u drop duplicate lines / -f fold case
 //	sort [-rnuf] [file...]
-func sortCommand(_ context.Context, env *Env, args []string) error {
+func sortCommand(_ context.Context, inv *Invocation) error {
 	fs := NewFlagSet()
 	reverseFlag := fs.Bool("-r")
 	numericFlag := fs.Bool("-n")
 	uniqueFlag := fs.Bool("-u")
 	foldFlag := fs.Bool("-f")
-	files, err := fs.Parse(args)
+	files, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -27,14 +27,14 @@ func sortCommand(_ context.Context, env *Env, args []string) error {
 
 	var lines []string
 	if len(files) == 0 {
-		b, err := readSource(env, "-")
+		b, err := readSource(inv, "-")
 		if err != nil {
 			return err
 		}
 		lines = splitLines(b)
 	} else {
 		for _, f := range files {
-			b, err := readSource(env, f)
+			b, err := readSource(inv, f)
 			if err != nil {
 				return err
 			}
@@ -81,7 +81,7 @@ func sortCommand(_ context.Context, env *Env, args []string) error {
 	}
 
 	for _, l := range lines {
-		fmt.Fprintln(env.HC.Stdout, l)
+		fmt.Fprintln(inv.Stdout, l)
 	}
 	return nil
 }

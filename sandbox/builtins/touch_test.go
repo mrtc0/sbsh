@@ -13,36 +13,36 @@ func Test_touch(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]struct {
-		setup   func(t *testing.T, env *Env)
+		setup   func(t *testing.T, env *Invocation)
 		args    []string
 		wantErr bool
-		check   func(t *testing.T, env *Env)
+		check   func(t *testing.T, env *Invocation)
 	}{
 		"creates an empty file": {
 			args: []string{"f"},
-			check: func(t *testing.T, env *Env) {
+			check: func(t *testing.T, env *Invocation) {
 				info, err := env.FS.Stat("/work/f")
 				require.NoError(t, err)
 				assert.Equal(t, int64(0), info.Size(), "size")
 			},
 		},
 		"does not truncate an existing file": {
-			setup: func(t *testing.T, env *Env) {
+			setup: func(t *testing.T, env *Invocation) {
 				mustWrite(t, env.FS, "/work/f", "keep")
 			},
 			args: []string{"f"},
-			check: func(t *testing.T, env *Env) {
+			check: func(t *testing.T, env *Invocation) {
 				assert.Equal(t, "keep", mustRead(t, env.FS, "/work/f"), "content")
 			},
 		},
 		"updates the modification time of an existing file": {
-			setup: func(t *testing.T, env *Env) {
+			setup: func(t *testing.T, env *Invocation) {
 				mustWrite(t, env.FS, "/work/f", "x")
 				old := time.Now().Add(-time.Hour)
 				require.NoError(t, env.FS.Chtimes("/work/f", old, old))
 			},
 			args: []string{"f"},
-			check: func(t *testing.T, env *Env) {
+			check: func(t *testing.T, env *Invocation) {
 				old := time.Now().Add(-time.Hour)
 				info, err := env.FS.Stat("/work/f")
 				require.NoError(t, err)
@@ -64,7 +64,8 @@ func Test_touch(t *testing.T) {
 				tc.setup(t, env)
 			}
 
-			err := touch(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := touch(context.Background(), env)
 			if tc.wantErr {
 				require.Error(t, err)
 				return

@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/mrtc0/sh/v3/expand"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -52,14 +51,14 @@ func TestPythonCommand_Invocation(t *testing.T) {
 			t.Parallel()
 
 			env, _, _ := NewTestEnv(t, tc.dir)
-			env.HC.Env = expand.ListEnviron()
 			fp := &fakePython{}
 			env.Python = fp
 			for path, body := range tc.seed {
 				require.NoError(t, afero.WriteFile(env.FS, path, []byte(body), 0o644))
 			}
 
-			require.NoError(t, pythonCommand(context.Background(), env, tc.args))
+			env.Args = tc.args
+			require.NoError(t, pythonCommand(context.Background(), env))
 
 			assert.Equal(t, tc.wantCode, fp.got.Code, "Code must be verbatim (no prelude)")
 			assert.Equal(t, tc.wantArgv, fp.got.Argv)

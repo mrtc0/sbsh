@@ -27,14 +27,14 @@ import (
 // (whole match), \1..\9 (capture groups), \n and \t. -i edits files in place;
 // otherwise the result is written to stdout. The "No newline at end of file"
 // convention is not emitted, but a missing trailing newline is preserved.
-func sedCommand(_ context.Context, env *Env, args []string) error {
+func sedCommand(_ context.Context, inv *Invocation) error {
 	// The script (when no -e is given) is the first operand, so stop scanning
 	// options there and treat the rest as the script and files.
 	fs := NewFlagSet().StopAtFirstOperand()
 	quietFlag := fs.Bool("-n")
 	inPlaceFlag := fs.Bool("-i")
 	exprFlags := fs.StringList("-e")
-	rest, err := fs.Parse(args)
+	rest, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func sedCommand(_ context.Context, env *Env, args []string) error {
 	}
 
 	if len(files) == 0 {
-		b, err := readSource(env, "-")
+		b, err := readSource(inv, "-")
 		if err != nil {
 			return err
 		}
@@ -109,13 +109,13 @@ func sedCommand(_ context.Context, env *Env, args []string) error {
 		if err != nil {
 			return err
 		}
-		_, err = io.WriteString(env.HC.Stdout, res)
+		_, err = io.WriteString(inv.Stdout, res)
 		return err
 	}
 
 	for _, f := range files {
-		abs := env.Abs(f)
-		b, err := afero.ReadFile(env.FS, abs)
+		abs := inv.Abs(f)
+		b, err := afero.ReadFile(inv.FS, abs)
 		if err != nil {
 			return err
 		}
@@ -125,15 +125,15 @@ func sedCommand(_ context.Context, env *Env, args []string) error {
 		}
 		if inPlace {
 			mode := os.FileMode(0o644)
-			if fi, err := env.FS.Stat(abs); err == nil {
+			if fi, err := inv.FS.Stat(abs); err == nil {
 				mode = fi.Mode()
 			}
-			if err := afero.WriteFile(env.FS, abs, []byte(res), mode); err != nil {
+			if err := afero.WriteFile(inv.FS, abs, []byte(res), mode); err != nil {
 				return err
 			}
 			continue
 		}
-		if _, err := io.WriteString(env.HC.Stdout, res); err != nil {
+		if _, err := io.WriteString(inv.Stdout, res); err != nil {
 			return err
 		}
 	}

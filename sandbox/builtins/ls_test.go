@@ -74,7 +74,8 @@ func Test_ls(t *testing.T) {
 				mustWrite(t, env.FS, path, content)
 			}
 
-			err := ls(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := ls(context.Background(), env)
 			if tc.wantErr {
 				require.Error(t, err)
 				return

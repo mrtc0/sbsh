@@ -11,27 +11,27 @@ import (
 // A second argument, when it is a suffix of the result, is removed.
 //
 //	basename path [suffix]
-func basename(_ context.Context, env *Env, args []string) error {
-	if len(args) == 0 || len(args) > 2 {
+func basename(_ context.Context, inv *Invocation) error {
+	if len(inv.Args) == 0 || len(inv.Args) > 2 {
 		return fmt.Errorf("usage: basename path [suffix]")
 	}
 
-	name := stripTrailingSlashes(args[0])
+	name := stripTrailingSlashes(inv.Args[0])
 	if name == "" {
 		// A path of only slashes reduces to "/".
-		fmt.Fprintln(env.HC.Stdout, "/")
+		fmt.Fprintln(inv.Stdout, "/")
 		return nil
 	}
 	base := path.Base(name)
 
-	if len(args) == 2 {
-		suffix := args[1]
+	if len(inv.Args) == 2 {
+		suffix := inv.Args[1]
 		if base != suffix && strings.HasSuffix(base, suffix) {
 			base = strings.TrimSuffix(base, suffix)
 		}
 	}
 
-	fmt.Fprintln(env.HC.Stdout, base)
+	fmt.Fprintln(inv.Stdout, base)
 	return nil
 }
 

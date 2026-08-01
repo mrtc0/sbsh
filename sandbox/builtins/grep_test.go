@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 func Test_grep(t *testing.T) {
@@ -128,18 +130,19 @@ func Test_grep(t *testing.T) {
 				mustWrite(t, env.FS, path, body)
 			}
 			if tc.seed == nil {
-				env.HC.Stdin = strings.NewReader(tc.stdin)
+				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			err := grep(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := grep(context.Background(), env)
 
 			switch {
 			case tc.wantErr:
 				require.Error(t, err)
 			case tc.wantExit1:
-				var ee exitError
+				var ee *command.ExitError
 				require.ErrorAs(t, err, &ee)
-				assert.Equal(t, 1, ee.code)
+				assert.Equal(t, 1, ee.Code)
 			default:
 				require.NoError(t, err)
 				if tc.wantContains != nil {
@@ -197,11 +200,12 @@ func Test_grep_recursiveContinuesPastDeniedEntries(t *testing.T) {
 				mustWrite(t, base, path, body)
 			}
 
-			err := grep(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := grep(context.Background(), env)
 
-			var ee exitError
+			var ee *command.ExitError
 			require.ErrorAs(t, err, &ee)
-			assert.Equal(t, 2, ee.code, "a refused entry exits 2, not 1")
+			assert.Equal(t, 2, ee.Code, "a refused entry exits 2, not 1")
 
 			for _, want := range tc.wantContains {
 				assert.Contains(t, stdout.String(), want)

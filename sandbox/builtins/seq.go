@@ -13,11 +13,11 @@ import (
 //	seq FIRST LAST
 //	seq FIRST STEP LAST
 //	-s STRING separator between numbers (default newline) / -w pad with leading zeros
-func seq(_ context.Context, env *Env, args []string) error {
+func seq(_ context.Context, inv *Invocation) error {
 	fs := NewFlagSet().AllowNegativeOperands()
 	sepFlag := fs.String("\n", "-s", "--separator")
 	equalWidthFlag := fs.Bool("-w", "--equal-width")
-	nums, err := fs.Parse(args)
+	nums, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -83,12 +83,12 @@ func seq(_ context.Context, env *Env, args []string) error {
 			s = padZero(s, width)
 		}
 		if i > 0 {
-			fmt.Fprint(env.HC.Stdout, sep)
+			fmt.Fprint(inv.Stdout, sep)
 		}
-		fmt.Fprint(env.HC.Stdout, s)
+		fmt.Fprint(inv.Stdout, s)
 	}
 	if len(formatted) > 0 {
-		fmt.Fprintln(env.HC.Stdout)
+		fmt.Fprintln(inv.Stdout)
 	}
 	return nil
 }

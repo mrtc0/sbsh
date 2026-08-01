@@ -11,6 +11,8 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // capturedRequest is what the test server saw, so that the tests can assert on
@@ -112,12 +114,13 @@ func Test_curl(t *testing.T) {
 			env, stdout, _ := NewTestEnv(t, "/work")
 			env.HTTP = &http.Client{}
 
-			err := curl(context.Background(), env, append(tc.args, srv.URL+tc.path))
+			env.Args = append(tc.args, srv.URL+tc.path)
+			err := curl(context.Background(), env)
 
 			if tc.wantExit != 0 {
-				var ee exitError
+				var ee *command.ExitError
 				require.ErrorAs(t, err, &ee)
-				assert.Equal(t, tc.wantExit, ee.code, "exit code")
+				assert.Equal(t, tc.wantExit, ee.Code, "exit code")
 			} else {
 				require.NoError(t, err)
 			}
@@ -211,10 +214,11 @@ func Test_curlRequest(t *testing.T) {
 				mustWrite(t, env.FS, path, body)
 			}
 			if tc.stdin != "" {
-				env.HC.Stdin = strings.NewReader(tc.stdin)
+				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			require.NoError(t, curl(context.Background(), env, append(tc.args, srv.URL+"/")))
+			env.Args = append(tc.args, srv.URL+"/")
+			require.NoError(t, curl(context.Background(), env))
 
 			assert.Equal(t, tc.wantMethod, got.method, "method")
 			assert.Equal(t, tc.wantBody, got.body, "body")
@@ -265,7 +269,8 @@ func Test_curlRejects(t *testing.T) {
 				env.HTTP = &http.Client{}
 			}
 
-			err := curl(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := curl(context.Background(), env)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.wantErrMsg)
 		})

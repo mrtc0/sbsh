@@ -9,28 +9,28 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mrtc0/sh/v3/expand"
+	"github.com/mrtc0/sh/v3/interp"
+	"github.com/mrtc0/sh/v3/syntax"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/mrtc0/sh/v3/interp"
-	"github.com/mrtc0/sh/v3/syntax"
 
 	"github.com/mrtc0/sbsh/vfs"
 )
 
-func NewTestEnv(t *testing.T, dir string) (*Env, *bytes.Buffer, *bytes.Buffer) {
+func NewTestEnv(t *testing.T, dir string) (*Invocation, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 
 	fs := vfs.NewVFS(afero.NewMemMapFs())
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	env := &Env{
-		FS: fs,
-		HC: interp.HandlerContext{
-			Dir:    dir,
-			Stdout: stdout,
-			Stderr: stderr,
-		},
+	env := &Invocation{
+		FS:     fs,
+		Env:    shellEnviron{expand.ListEnviron()},
+		Dir:    dir,
+		Stdout: stdout,
+		Stderr: stderr,
 	}
 	return env, stdout, stderr
 }
@@ -38,7 +38,7 @@ func NewTestEnv(t *testing.T, dir string) (*Env, *bytes.Buffer, *bytes.Buffer) {
 // NewTestEnvWithDeny builds an env whose filesystem enforces deny patterns. The
 // base filesystem is returned as well, since seeding a path the patterns refuse
 // has to bypass the deny layer, exactly as a host directory holding the file does.
-func NewTestEnvWithDeny(t *testing.T, dir, cmd string, patterns ...string) (*Env, afero.Fs, *bytes.Buffer, *bytes.Buffer) {
+func NewTestEnvWithDeny(t *testing.T, dir, cmd string, patterns ...string) (*Invocation, afero.Fs, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 
 	base := vfs.NewVFS(afero.NewMemMapFs())
@@ -47,14 +47,13 @@ func NewTestEnvWithDeny(t *testing.T, dir, cmd string, patterns ...string) (*Env
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	env := &Env{
-		Name: cmd,
-		FS:   deny,
-		HC: interp.HandlerContext{
-			Dir:    dir,
-			Stdout: stdout,
-			Stderr: stderr,
-		},
+	env := &Invocation{
+		Name:   cmd,
+		FS:     deny,
+		Env:    shellEnviron{expand.ListEnviron()},
+		Dir:    dir,
+		Stdout: stdout,
+		Stderr: stderr,
 	}
 	return env, base, stdout, stderr
 }
@@ -64,7 +63,7 @@ func NewTestEnvWithDeny(t *testing.T, dir, cmd string, patterns ...string) (*Env
 // matters here: it removes a non-empty directory in one step, so a test that
 // needs the real ENOTEMPTY has to mount a host directory. The returned path is
 // the host side, which a test seeds directly.
-func NewTestEnvWithHostMount(t *testing.T, cmd string, patterns ...string) (*Env, string, *bytes.Buffer, *bytes.Buffer) {
+func NewTestEnvWithHostMount(t *testing.T, cmd string, patterns ...string) (*Invocation, string, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 
 	hostDir := t.TempDir()
@@ -80,14 +79,13 @@ func NewTestEnvWithHostMount(t *testing.T, cmd string, patterns ...string) (*Env
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	env := &Env{
-		Name: cmd,
-		FS:   deny,
-		HC: interp.HandlerContext{
-			Dir:    "/work",
-			Stdout: stdout,
-			Stderr: stderr,
-		},
+	env := &Invocation{
+		Name:   cmd,
+		FS:     deny,
+		Env:    shellEnviron{expand.ListEnviron()},
+		Dir:    "/work",
+		Stdout: stdout,
+		Stderr: stderr,
 	}
 	return env, hostDir, stdout, stderr
 }
@@ -103,47 +101,47 @@ func installTestCommands(t *testing.T) {
 	registry = replacement
 	t.Cleanup(func() { registry = saved })
 
-	replacement["test_echo"] = func(_ context.Context, env *Env, args []string) error {
-		fmt.Fprintln(env.HC.Stdout, strings.Join(args, " "))
+	replacement["test_echo"] = func(_ context.Context, env *Invocation) error {
+		fmt.Fprintln(env.Stdout, strings.Join(env.Args, " "))
 		return nil
 	}
 
-	replacement["test_fail"] = func(_ context.Context, _ *Env, _ []string) error {
+	replacement["test_fail"] = func(_ context.Context, _ *Invocation) error {
 		return errors.New("boom")
 	}
 
-	replacement["test_exit"] = func(_ context.Context, _ *Env, _ []string) error {
+	replacement["test_exit"] = func(_ context.Context, _ *Invocation) error {
 		return exit(3)
 	}
 
-	replacement["test_exit_big"] = func(_ context.Context, _ *Env, _ []string) error {
+	replacement["test_exit_big"] = func(_ context.Context, _ *Invocation) error {
 		return exit(300)
 	}
 
-	replacement["test_exit_native"] = func(_ context.Context, _ *Env, _ []string) error {
+	replacement["test_exit_native"] = func(_ context.Context, _ *Invocation) error {
 		return interp.ExitStatus(3)
 	}
 
-	replacement["test_dir"] = func(_ context.Context, env *Env, _ []string) error {
-		fmt.Fprintln(env.HC.Stdout, env.HC.Dir)
+	replacement["test_dir"] = func(_ context.Context, env *Invocation) error {
+		fmt.Fprintln(env.Stdout, env.Dir)
 		return nil
 	}
 
-	replacement["test_cat"] = func(_ context.Context, env *Env, args []string) error {
-		b, err := afero.ReadFile(env.FS, args[0])
+	replacement["test_cat"] = func(_ context.Context, env *Invocation) error {
+		b, err := afero.ReadFile(env.FS, env.Args[0])
 		if err != nil {
 			return err
 		}
-		env.HC.Stdout.Write(b)
+		env.Stdout.Write(b)
 		return nil
 	}
 
-	replacement["test_net"] = func(_ context.Context, env *Env, _ []string) error {
+	replacement["test_net"] = func(_ context.Context, env *Invocation) error {
 		if env.HTTP == nil {
-			fmt.Fprintln(env.HC.Stdout, "nil")
+			fmt.Fprintln(env.Stdout, "nil")
 			return nil
 		}
-		fmt.Fprintln(env.HC.Stdout, "client")
+		fmt.Fprintln(env.Stdout, "client")
 		return nil
 	}
 }
@@ -236,7 +234,7 @@ func TestExecMiddleware(t *testing.T) {
 			script:   "test_exit_native",
 			wantExit: 3,
 		},
-		"threads the runner Dir into Env.HC.Dir": {
+		"threads the runner Dir into Env.Dir": {
 			script:          "test_dir",
 			wantStdoutIsDir: true,
 		},

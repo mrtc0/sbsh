@@ -7,8 +7,8 @@ import (
 )
 
 // touch creates an empty file if it does not exist, or updates its modification time to now.
-func touch(_ context.Context, env *Env, args []string) error {
-	paths, err := NewFlagSet().Parse(args)
+func touch(_ context.Context, inv *Invocation) error {
+	paths, err := NewFlagSet().Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -17,14 +17,14 @@ func touch(_ context.Context, env *Env, args []string) error {
 	}
 	now := time.Now()
 	for _, p := range paths {
-		abs := env.Abs(p)
-		if _, err := env.FS.Stat(abs); err == nil {
-			if err := env.FS.Chtimes(abs, now, now); err != nil {
+		abs := inv.Abs(p)
+		if _, err := inv.FS.Stat(abs); err == nil {
+			if err := inv.FS.Chtimes(abs, now, now); err != nil {
 				return err
 			}
 			continue
 		}
-		f, err := env.FS.Create(abs)
+		f, err := inv.FS.Create(abs)
 		if err != nil {
 			return err
 		}

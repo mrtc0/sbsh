@@ -253,12 +253,12 @@ func parseLineCount(args []string, def int) (n int, files []string, err error) {
 
 // readSource returns the file contents at path. When path is "" or "-" it reads from
 // stdin (empty if Stdin is nil).
-func readSource(env *Env, path string) ([]byte, error) {
+func readSource(inv *Invocation, path string) ([]byte, error) {
 	if path == "" || path == "-" {
-		if env.HC.Stdin == nil {
+		if inv.Stdin == nil {
 			return nil, nil
 		}
-		return io.ReadAll(env.HC.Stdin)
+		return io.ReadAll(inv.Stdin)
 	}
-	return afero.ReadFile(env.FS, env.Abs(path))
+	return afero.ReadFile(inv.FS, inv.Abs(path))
 }

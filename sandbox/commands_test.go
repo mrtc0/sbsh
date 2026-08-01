@@ -236,7 +236,7 @@ func showEnv() command.Command {
 	return command.New("showenv", "print the named environment variables", func(_ context.Context, inv *command.Invocation) error {
 		parts := make([]string, 0, len(inv.Args))
 		for _, name := range inv.Args {
-			value, ok := inv.Env(name)
+			value, ok := inv.Env.Lookup(name)
 			if !ok {
 				value = "<unset>"
 			}

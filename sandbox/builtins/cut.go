@@ -16,13 +16,13 @@ import (
 //	-s with -f, skip lines that contain no delimiter
 //	cut -f LIST [-d DELIM] [-s] [file...]
 //	cut -c LIST [file...]
-func cut(_ context.Context, env *Env, args []string) error {
+func cut(_ context.Context, inv *Invocation) error {
 	fs := NewFlagSet()
 	fieldsSpec := fs.String("", "-f")
 	charsSpec := fs.String("", "-c")
 	delimFlag := fs.String("\t", "-d")
 	onlyDelim := fs.Bool("-s", "--only-delimited")
-	files, err := fs.Parse(args)
+	files, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -47,22 +47,22 @@ func cut(_ context.Context, env *Env, args []string) error {
 		files = []string{"-"}
 	}
 	for _, f := range files {
-		b, err := readSource(env, f)
+		b, err := readSource(inv, f)
 		if err != nil {
 			return err
 		}
 		for _, line := range splitLines(b) {
 			if haveChars {
-				fmt.Fprintln(env.HC.Stdout, selectChars(line, ranges))
+				fmt.Fprintln(inv.Stdout, selectChars(line, ranges))
 				continue
 			}
 			if !strings.Contains(line, delim) {
 				if !onlyDelimited {
-					fmt.Fprintln(env.HC.Stdout, line)
+					fmt.Fprintln(inv.Stdout, line)
 				}
 				continue
 			}
-			fmt.Fprintln(env.HC.Stdout, selectFields(line, delim, ranges))
+			fmt.Fprintln(inv.Stdout, selectFields(line, delim, ranges))
 		}
 	}
 	return nil

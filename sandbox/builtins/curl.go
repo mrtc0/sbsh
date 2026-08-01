@@ -32,7 +32,7 @@ const curlFailExit = 22
 // Every request goes through the client the sandbox's network policy built. A
 // sandbox configured without a policy has no client, and curl says so rather
 // than reaching the network by some other route.
-func curl(ctx context.Context, env *Env, args []string) error {
+func curl(ctx context.Context, inv *Invocation) error {
 	fs := NewFlagSet()
 	method := fs.String("", "-X", "--request")
 	headers := fs.StringList("-H", "--header")
@@ -44,20 +44,20 @@ func curl(ctx context.Context, env *Env, args []string) error {
 	fail := fs.Bool("-f", "--fail")
 	fs.Bool("-s", "--silent")
 
-	operands, err := fs.Parse(args)
+	operands, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
 	if len(operands) != 1 {
 		return errors.New("usage: curl [options] URL")
 	}
-	if env.HTTP == nil {
+	if inv.HTTP == nil {
 		return errors.New("network access is not permitted")
 	}
 
 	var body io.Reader
 	if fs.Seen("-d") {
-		payload, err := curlData(env, *data)
+		payload, err := curlData(inv, *data)
 		if err != nil {
 			return err
 		}
@@ -77,7 +77,7 @@ func curl(ctx context.Context, env *Env, args []string) error {
 	// A copy so that the redirect choice is this call's alone: the client is
 	// shared by every command in the sandbox. It keeps the same transport, and
 	// with it the same policy.
-	client := *env.HTTP
+	client := *inv.HTTP
 	if !*location {
 		client.CheckRedirect = func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
@@ -91,16 +91,16 @@ func curl(ctx context.Context, env *Env, args []string) error {
 	defer res.Body.Close()
 
 	if *fail && res.StatusCode >= http.StatusBadRequest {
-		fmt.Fprintf(env.HC.Stderr, "curl: the requested URL returned error: %s\n", res.Status)
+		fmt.Fprintf(inv.Stderr, "curl: the requested URL returned error: %s\n", res.Status)
 		return exit(curlFailExit)
 	}
 
 	withHeaders := *include || *head
 	if *output == "" {
-		return writeResponse(env.HC.Stdout, res, withHeaders)
+		return writeResponse(inv.Stdout, res, withHeaders)
 	}
 
-	f, err := env.FS.OpenFile(env.Abs(*output), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	f, err := inv.FS.OpenFile(inv.Abs(*output), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
 	}
@@ -153,11 +153,11 @@ func curlRequest(ctx context.Context, url string, opts curlOptions) (*http.Reque
 
 // curlData resolves the -d value: @FILE reads the file, @- reads standard
 // input, and anything else is the literal body.
-func curlData(env *Env, data string) ([]byte, error) {
+func curlData(inv *Invocation, data string) ([]byte, error) {
 	if !strings.HasPrefix(data, "@") {
 		return []byte(data), nil
 	}
-	return readSource(env, strings.TrimPrefix(data, "@"))
+	return readSource(inv, strings.TrimPrefix(data, "@"))
 }
 
 func writeResponse(w io.Writer, res *http.Response, withHeaders bool) error {

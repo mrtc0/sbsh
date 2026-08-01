@@ -33,15 +33,17 @@ func Test_checksums(t *testing.T) {
 			t.Parallel()
 			env, stdout, _ := NewTestEnv(t, "/work")
 			mustWrite(t, env.FS, "/work/f", "abc")
-			require.NoError(t, tc.fn(context.Background(), env, []string{"f"}))
+			env.Args = []string{"f"}
+			require.NoError(t, tc.fn(context.Background(), env))
 			assert.Equal(t, tc.want+"  f\n", stdout.String())
 		})
 
 		t.Run(name+" reads stdin as -", func(t *testing.T) {
 			t.Parallel()
 			env, stdout, _ := NewTestEnv(t, "/work")
-			env.HC.Stdin = strings.NewReader("abc")
-			require.NoError(t, tc.fn(context.Background(), env, nil))
+			env.Stdin = strings.NewReader("abc")
+			env.Args = nil
+			require.NoError(t, tc.fn(context.Background(), env))
 			assert.Equal(t, tc.want+"  -\n", stdout.String())
 		})
 	}
@@ -53,7 +55,8 @@ func Test_checksums_multipleFiles(t *testing.T) {
 	env, stdout, _ := NewTestEnv(t, "/work")
 	mustWrite(t, env.FS, "/work/a", "abc")
 	mustWrite(t, env.FS, "/work/b", "abc")
-	require.NoError(t, md5sum(context.Background(), env, []string{"a", "b"}))
+	env.Args = []string{"a", "b"}
+	require.NoError(t, md5sum(context.Background(), env))
 	assert.Equal(t, md5abc+"  a\n"+md5abc+"  b\n", stdout.String())
 }
 
@@ -61,5 +64,6 @@ func Test_checksums_missingFile(t *testing.T) {
 	t.Parallel()
 
 	env, _, _ := NewTestEnv(t, "/work")
-	require.Error(t, sha256sum(context.Background(), env, []string{"nope"}))
+	env.Args = []string{"nope"}
+	require.Error(t, sha256sum(context.Background(), env))
 }

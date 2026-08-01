@@ -174,13 +174,16 @@ mentions the shell:
 | `Args` | The arguments, without the name |
 | `Dir` | The working directory; `inv.Abs(p)` resolves an argument against it |
 | `Stdin`, `Stdout`, `Stderr` | The streams the shell wired up — a pipe, a redirect, or captured output |
-| `Env` | Variable lookup as the script sees it, including `LANG=C mycmd` assignments; `inv.Getenv(name)` when unset and empty need not differ |
+| `Env` | The environment as the script sees it, including `LANG=C mycmd` assignments: `Lookup` for one variable, `All` for every one; `inv.Getenv(name)` when unset and empty need not differ |
 | `FS` | The sandbox filesystem, mounts resolved and deny patterns in force |
 | `HTTP` | The policy-checked client, `nil` when no network was allowed |
+| `Python` | The sandbox's Python interpreter, the same one the `python` command runs on |
 
-`FS` and `HTTP` are the only ways out, the same two the builtins have: a command
-that reaches for `os` or `net/http` directly steps outside the sandbox, and
-registering it does not make that safe.
+`FS`, `HTTP` and `Python` are the only ways out, and they are exactly the ones
+the builtins have — a builtin is a `func(ctx, *command.Invocation) error` too, so
+a custom command is the same kind of thing as `grep`, with the same reach. A
+command that instead reaches for `os` or `net/http` directly steps outside the
+sandbox, and registering it does not make that safe.
 
 Returning a plain error prints `name: message` on stderr and exits `1`, which is
 what a usage or I/O failure wants. A command with statuses of its own returns

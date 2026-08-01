@@ -17,7 +17,7 @@ import (
 //	-E interpret the pattern as an extended regular expression (accepted for
 //	   compatibility; the pattern is always parsed as RE2, which is ERE-compatible)
 //	grep [-cEilnrv] pattern [file...]
-func grep(_ context.Context, env *Env, args []string) error {
+func grep(_ context.Context, inv *Invocation) error {
 	fs := NewFlagSet()
 	ignoreCase := fs.Bool("-i")
 	lineNum := fs.Bool("-n")
@@ -27,7 +27,7 @@ func grep(_ context.Context, env *Env, args []string) error {
 	listFlag := fs.Bool("-l")
 	_ = fs.Bool("-E") // ERE-compatible already; accepted for compatibility
 
-	rest, err := fs.Parse(args)
+	rest, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -72,34 +72,34 @@ func grep(_ context.Context, env *Env, args []string) error {
 			if *lineNum {
 				prefix += fmt.Sprintf("%d:", i+1)
 			}
-			fmt.Fprintln(env.HC.Stdout, prefix+line)
+			fmt.Fprintln(inv.Stdout, prefix+line)
 		}
 		switch {
 		case listFiles:
 			if n > 0 {
-				fmt.Fprintln(env.HC.Stdout, name)
+				fmt.Fprintln(inv.Stdout, name)
 			}
 		case countOnly:
 			prefix := ""
 			if withName {
 				prefix += name + ":"
 			}
-			fmt.Fprintf(env.HC.Stdout, "%s%d\n", prefix, n)
+			fmt.Fprintf(inv.Stdout, "%s%d\n", prefix, n)
 		}
 	}
 
-	guard := &walkGuard{env: env}
+	guard := &walkGuard{inv: inv}
 
 	if len(files) == 0 {
-		b, err := readSource(env, "-")
+		b, err := readSource(inv, "-")
 		if err != nil {
 			return err
 		}
 		scan("(standard input)", b)
 	} else {
 		for _, f := range files {
-			abs := env.Abs(f)
-			info, err := env.FS.Stat(abs)
+			abs := inv.Abs(f)
+			info, err := inv.FS.Stat(abs)
 			if err != nil {
 				if guard.skip(err) {
 					continue
@@ -110,7 +110,7 @@ func grep(_ context.Context, env *Env, args []string) error {
 				if !*recursive {
 					return fmt.Errorf("%q is a directory", f)
 				}
-				err := afero.Walk(env.FS, abs, guard.wrap(func(p string, fi os.FileInfo, _ error) error {
+				err := afero.Walk(inv.FS, abs, guard.wrap(func(p string, fi os.FileInfo, _ error) error {
 					if fi.IsDir() {
 						return nil
 					}
@@ -123,7 +123,7 @@ func grep(_ context.Context, env *Env, args []string) error {
 					if fi.Mode()&os.ModeSymlink != 0 {
 						return nil
 					}
-					b, err := afero.ReadFile(env.FS, p)
+					b, err := afero.ReadFile(inv.FS, p)
 					if err != nil {
 						return err
 					}
@@ -135,7 +135,7 @@ func grep(_ context.Context, env *Env, args []string) error {
 				}
 				continue
 			}
-			b, err := afero.ReadFile(env.FS, abs)
+			b, err := afero.ReadFile(inv.FS, abs)
 			if err != nil {
 				if guard.skip(err) {
 					continue

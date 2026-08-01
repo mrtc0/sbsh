@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 func Test_jq(t *testing.T) {
@@ -78,10 +80,11 @@ func Test_jq(t *testing.T) {
 				mustWrite(t, env.FS, path, body)
 			}
 			if tc.seed == nil {
-				env.HC.Stdin = strings.NewReader(tc.stdin)
+				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			require.NoError(t, jqCommand(context.Background(), env, tc.args))
+			env.Args = tc.args
+			require.NoError(t, jqCommand(context.Background(), env))
 			assert.Equal(t, tc.want, stdout.String())
 		})
 	}
@@ -123,16 +126,17 @@ func Test_jq_exitStatus(t *testing.T) {
 			t.Parallel()
 
 			env, _, _ := NewTestEnv(t, "/work")
-			env.HC.Stdin = strings.NewReader(tc.stdin)
+			env.Stdin = strings.NewReader(tc.stdin)
 
-			err := jqCommand(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := jqCommand(context.Background(), env)
 			if tc.ok {
 				require.NoError(t, err)
 				return
 			}
-			var ee exitError
+			var ee *command.ExitError
 			require.ErrorAs(t, err, &ee)
-			assert.Equal(t, tc.code, uint8(ee.code))
+			assert.Equal(t, tc.code, uint8(ee.Code))
 		})
 	}
 }
@@ -143,13 +147,15 @@ func Test_jq_errors(t *testing.T) {
 	t.Run("no filter", func(t *testing.T) {
 		t.Parallel()
 		env, _, _ := NewTestEnv(t, "/work")
-		require.Error(t, jqCommand(context.Background(), env, nil))
+		env.Args = nil
+		require.Error(t, jqCommand(context.Background(), env))
 	})
 
 	t.Run("invalid filter", func(t *testing.T) {
 		t.Parallel()
 		env, _, _ := NewTestEnv(t, "/work")
-		env.HC.Stdin = strings.NewReader(`{}`)
-		require.Error(t, jqCommand(context.Background(), env, []string{".["}))
+		env.Stdin = strings.NewReader(`{}`)
+		env.Args = []string{".["}
+		require.Error(t, jqCommand(context.Background(), env))
 	})
 }

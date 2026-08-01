@@ -13,34 +13,34 @@ func Test_mkdir(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]struct {
-		setup   func(t *testing.T, env *Env)
+		setup   func(t *testing.T, env *Invocation)
 		args    []string
 		wantErr bool
-		check   func(t *testing.T, env *Env)
+		check   func(t *testing.T, env *Invocation)
 	}{
 		"creates a directory": {
 			args: []string{"d"},
-			check: func(t *testing.T, env *Env) {
+			check: func(t *testing.T, env *Invocation) {
 				ok, _ := afero.DirExists(env.FS, "/work/d")
 				assert.True(t, ok, "expected /work/d to be a directory")
 			},
 		},
 		"without -p fails on an existing directory": {
-			setup: func(t *testing.T, env *Env) {
+			setup: func(t *testing.T, env *Invocation) {
 				mustMkdir(t, env.FS, "/work/d")
 			},
 			args:    []string{"d"},
 			wantErr: true,
 		},
 		"-p is idempotent on an existing directory": {
-			setup: func(t *testing.T, env *Env) {
+			setup: func(t *testing.T, env *Invocation) {
 				mustMkdir(t, env.FS, "/work/d")
 			},
 			args: []string{"-p", "d"},
 		},
 		"-p creates parents": {
 			args: []string{"-p", "a/b/c"},
-			check: func(t *testing.T, env *Env) {
+			check: func(t *testing.T, env *Invocation) {
 				ok, _ := afero.DirExists(env.FS, "/work/a/b/c")
 				assert.True(t, ok, "expected /work/a/b/c to exist")
 			},
@@ -60,7 +60,8 @@ func Test_mkdir(t *testing.T) {
 				tc.setup(t, env)
 			}
 
-			err := mkdir(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := mkdir(context.Background(), env)
 			if tc.wantErr {
 				require.Error(t, err)
 				return

@@ -14,16 +14,16 @@ func Test_mv(t *testing.T) {
 
 	cases := map[string]struct {
 		args    []string
-		setup   func(t *testing.T, env *Env)
+		setup   func(t *testing.T, env *Invocation)
 		wantErr bool
-		check   func(t *testing.T, env *Env)
+		check   func(t *testing.T, env *Invocation)
 	}{
 		"renames a file": {
 			args: []string{"old", "new"},
-			setup: func(t *testing.T, env *Env) {
+			setup: func(t *testing.T, env *Invocation) {
 				mustWrite(t, env.FS, "/work/old", "data")
 			},
-			check: func(t *testing.T, env *Env) {
+			check: func(t *testing.T, env *Invocation) {
 				assert.Equal(t, "data", mustRead(t, env.FS, "/work/new"))
 				exists, _ := afero.Exists(env.FS, "/work/old")
 				assert.False(t, exists, "old should no longer exist")
@@ -31,11 +31,11 @@ func Test_mv(t *testing.T) {
 		},
 		"moves into an existing directory using the base name": {
 			args: []string{"f", "dst"},
-			setup: func(t *testing.T, env *Env) {
+			setup: func(t *testing.T, env *Invocation) {
 				mustWrite(t, env.FS, "/work/f", "x")
 				mustMkdir(t, env.FS, "/work/dst")
 			},
-			check: func(t *testing.T, env *Env) {
+			check: func(t *testing.T, env *Invocation) {
 				assert.Equal(t, "x", mustRead(t, env.FS, "/work/dst/f"))
 			},
 		},
@@ -58,7 +58,8 @@ func Test_mv(t *testing.T) {
 				tc.setup(t, env)
 			}
 
-			err := mv(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := mv(context.Background(), env)
 			if tc.wantErr {
 				require.Error(t, err)
 				return

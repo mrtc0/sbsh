@@ -23,7 +23,7 @@ import (
 //	tar -c[z]f archive file...
 //	tar -x[z]f archive [-C dir]
 //	tar -t[z]f archive
-func tarCommand(_ context.Context, env *Env, args []string) error {
+func tarCommand(_ context.Context, inv *Invocation) error {
 	fs := NewFlagSet()
 	create := fs.Bool("-c")
 	extract := fs.Bool("-x")
@@ -32,7 +32,7 @@ func tarCommand(_ context.Context, env *Env, args []string) error {
 	verboseFlag := fs.Bool("-v")
 	archiveFlag := fs.String("", "-f")
 	changeDirFlag := fs.String("", "-C")
-	files, err := fs.Parse(args)
+	files, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -59,23 +59,23 @@ func tarCommand(_ context.Context, env *Env, args []string) error {
 		return fmt.Errorf("usage: tar -c|-x|-t [-z] -f archive [file...]")
 	}
 
-	base := env.HC.Dir
+	base := inv.Dir
 	if changeDir != "" {
-		base = env.Abs(changeDir)
+		base = inv.Abs(changeDir)
 	}
 
 	switch mode {
 	case 'c':
-		return tarCreate(env, archive, base, gz, verbose, files)
+		return tarCreate(inv, archive, base, gz, verbose, files)
 	case 'x':
-		return tarExtract(env, archive, base, gz, verbose)
+		return tarExtract(inv, archive, base, gz, verbose)
 	case 't':
-		return tarList(env, archive, gz)
+		return tarList(inv, archive, gz)
 	}
 	return nil
 }
 
-func tarCreate(env *Env, archive, base string, gz, verbose bool, files []string) error {
+func tarCreate(inv *Invocation, archive, base string, gz, verbose bool, files []string) error {
 	if archive == "" {
 		return fmt.Errorf("no archive file specified")
 	}
@@ -86,10 +86,10 @@ func tarCreate(env *Env, archive, base string, gz, verbose bool, files []string)
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 
-	guard := &walkGuard{env: env}
+	guard := &walkGuard{inv: inv}
 	for _, f := range files {
 		root := resolveUnder(base, f)
-		err := afero.Walk(env.FS, root, guard.wrap(func(p string, info os.FileInfo, _ error) error {
+		err := afero.Walk(inv.FS, root, guard.wrap(func(p string, info os.FileInfo, _ error) error {
 			// A link cannot be stored as a link: the archive would carry a member
 			// that extraction has no way to recreate, since the virtual filesystem
 			// offers no link creation. Storing the target's bytes under the link's
@@ -119,12 +119,12 @@ func tarCreate(env *Env, archive, base string, gz, verbose bool, files []string)
 				return err
 			}
 			if verbose {
-				fmt.Fprintln(env.HC.Stdout, hdr.Name)
+				fmt.Fprintln(inv.Stdout, hdr.Name)
 			}
 			if info.IsDir() {
 				return nil
 			}
-			b, err := afero.ReadFile(env.FS, p)
+			b, err := afero.ReadFile(inv.FS, p)
 			if err != nil {
 				return err
 			}
@@ -149,7 +149,7 @@ func tarCreate(env *Env, archive, base string, gz, verbose bool, files []string)
 	}
 	// The archive is written even when a member was refused: it holds everything
 	// that could be read, and the exit code reports that it is not the whole tree.
-	if err := afero.WriteFile(env.FS, env.Abs(archive), out, 0o644); err != nil {
+	if err := afero.WriteFile(inv.FS, inv.Abs(archive), out, 0o644); err != nil {
 		return err
 	}
 	if guard.refused {
@@ -165,8 +165,8 @@ func tarCreate(env *Env, archive, base string, gz, verbose bool, files []string)
 // Members are validated as they are read, not up front — a tar stream would
 // have to be buffered whole to check it in advance — so an abort leaves the
 // members written before it in place.
-func tarExtract(env *Env, archive, base string, gz, verbose bool) error {
-	tr, closer, err := tarReader(env, archive, gz)
+func tarExtract(inv *Invocation, archive, base string, gz, verbose bool) error {
+	tr, closer, err := tarReader(inv, archive, gz)
 	if err != nil {
 		return err
 	}
@@ -185,22 +185,22 @@ func tarExtract(env *Env, archive, base string, gz, verbose bool) error {
 			return err
 		}
 		if verbose {
-			fmt.Fprintln(env.HC.Stdout, hdr.Name)
+			fmt.Fprintln(inv.Stdout, hdr.Name)
 		}
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			if err := env.FS.MkdirAll(target, os.FileMode(hdr.Mode)); err != nil {
+			if err := inv.FS.MkdirAll(target, os.FileMode(hdr.Mode)); err != nil {
 				return err
 			}
 		default:
-			if err := env.FS.MkdirAll(path.Dir(target), 0o755); err != nil {
+			if err := inv.FS.MkdirAll(path.Dir(target), 0o755); err != nil {
 				return err
 			}
 			b, err := io.ReadAll(tr)
 			if err != nil {
 				return err
 			}
-			if err := afero.WriteFile(env.FS, target, b, os.FileMode(hdr.Mode)); err != nil {
+			if err := afero.WriteFile(inv.FS, target, b, os.FileMode(hdr.Mode)); err != nil {
 				return err
 			}
 		}
@@ -208,8 +208,8 @@ func tarExtract(env *Env, archive, base string, gz, verbose bool) error {
 	return nil
 }
 
-func tarList(env *Env, archive string, gz bool) error {
-	tr, closer, err := tarReader(env, archive, gz)
+func tarList(inv *Invocation, archive string, gz bool) error {
+	tr, closer, err := tarReader(inv, archive, gz)
 	if err != nil {
 		return err
 	}
@@ -223,15 +223,15 @@ func tarList(env *Env, archive string, gz bool) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintln(env.HC.Stdout, hdr.Name)
+		fmt.Fprintln(inv.Stdout, hdr.Name)
 	}
 	return nil
 }
 
 // tarReader opens the archive (file or stdin) and returns a tar.Reader plus a
 // closer for any gzip stream it wraps.
-func tarReader(env *Env, archive string, gz bool) (*tar.Reader, func(), error) {
-	b, err := readSource(env, archive)
+func tarReader(inv *Invocation, archive string, gz bool) (*tar.Reader, func(), error) {
+	b, err := readSource(inv, archive)
 	if err != nil {
 		return nil, nil, err
 	}

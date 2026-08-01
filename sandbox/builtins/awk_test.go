@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 func Test_awk(t *testing.T) {
@@ -80,10 +82,11 @@ func Test_awk(t *testing.T) {
 				mustWrite(t, env.FS, path, body)
 			}
 			if tc.seed == nil {
-				env.HC.Stdin = strings.NewReader(tc.stdin)
+				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			require.NoError(t, awkCommand(context.Background(), env, tc.args))
+			env.Args = tc.args
+			require.NoError(t, awkCommand(context.Background(), env))
 			assert.Equal(t, tc.want, stdout.String())
 		})
 	}
@@ -94,9 +97,10 @@ func Test_awk_program_from_file(t *testing.T) {
 
 	env, stdout, _ := NewTestEnv(t, "/work")
 	mustWrite(t, env.FS, "/work/prog.awk", "{print $1 + $2}\n")
-	env.HC.Stdin = strings.NewReader("2 3\n10 20\n")
+	env.Stdin = strings.NewReader("2 3\n10 20\n")
 
-	require.NoError(t, awkCommand(context.Background(), env, []string{"-f", "prog.awk"}))
+	env.Args = []string{"-f", "prog.awk"}
+	require.NoError(t, awkCommand(context.Background(), env))
 	assert.Equal(t, "5\n30\n", stdout.String())
 }
 
@@ -104,12 +108,13 @@ func Test_awk_exitStatus(t *testing.T) {
 	t.Parallel()
 
 	env, _, _ := NewTestEnv(t, "/work")
-	env.HC.Stdin = strings.NewReader("")
+	env.Stdin = strings.NewReader("")
 
-	err := awkCommand(context.Background(), env, []string{"BEGIN{exit 3}"})
-	var ee exitError
+	env.Args = []string{"BEGIN{exit 3}"}
+	err := awkCommand(context.Background(), env)
+	var ee *command.ExitError
 	require.ErrorAs(t, err, &ee)
-	assert.Equal(t, 3, ee.code)
+	assert.Equal(t, 3, ee.Code)
 }
 
 // Test_awk_sandboxed asserts the interpreter cannot reach the host: process
@@ -128,8 +133,9 @@ func Test_awk_sandboxed(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			env, _, _ := NewTestEnv(t, "/work")
-			env.HC.Stdin = strings.NewReader("")
-			require.Error(t, awkCommand(context.Background(), env, []string{prog}))
+			env.Stdin = strings.NewReader("")
+			env.Args = []string{prog}
+			require.Error(t, awkCommand(context.Background(), env))
 		})
 	}
 }
@@ -140,14 +146,15 @@ func Test_awk_contextCancel(t *testing.T) {
 	t.Parallel()
 
 	env, _, _ := NewTestEnv(t, "/work")
-	env.HC.Stdin = strings.NewReader("")
+	env.Stdin = strings.NewReader("")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
+	env.Args = []string{"BEGIN{x=0; while (1) x++}"}
 	done := make(chan error, 1)
 	go func() {
-		done <- awkCommand(ctx, env, []string{"BEGIN{x=0; while (1) x++}"})
+		done <- awkCommand(ctx, env)
 	}()
 
 	select {

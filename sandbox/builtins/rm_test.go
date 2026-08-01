@@ -9,23 +9,25 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 func Test_rm(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]struct {
-		setup   func(t *testing.T, env *Env)
+		setup   func(t *testing.T, env *Invocation)
 		args    []string
 		wantErr bool
-		check   func(t *testing.T, env *Env)
+		check   func(t *testing.T, env *Invocation)
 	}{
 		"removes a file": {
-			setup: func(t *testing.T, env *Env) {
+			setup: func(t *testing.T, env *Invocation) {
 				mustWrite(t, env.FS, "/work/f", "x")
 			},
 			args: []string{"f"},
-			check: func(t *testing.T, env *Env) {
+			check: func(t *testing.T, env *Invocation) {
 				ok, _ := afero.Exists(env.FS, "/work/f")
 				assert.False(t, ok, "f should be gone")
 			},
@@ -38,19 +40,19 @@ func Test_rm(t *testing.T) {
 			args: []string{"-f", "nope"},
 		},
 		"refuses a directory without -r": {
-			setup: func(t *testing.T, env *Env) {
+			setup: func(t *testing.T, env *Invocation) {
 				mustMkdir(t, env.FS, "/work/d")
 			},
 			args:    []string{"d"},
 			wantErr: true,
 		},
 		"-r removes a directory tree": {
-			setup: func(t *testing.T, env *Env) {
+			setup: func(t *testing.T, env *Invocation) {
 				mustWrite(t, env.FS, "/work/d/a", "1")
 				mustWrite(t, env.FS, "/work/d/sub/b", "2")
 			},
 			args: []string{"-r", "d"},
-			check: func(t *testing.T, env *Env) {
+			check: func(t *testing.T, env *Invocation) {
 				ok, _ := afero.Exists(env.FS, "/work/d")
 				assert.False(t, ok, "directory tree should be gone")
 			},
@@ -66,7 +68,8 @@ func Test_rm(t *testing.T) {
 				tc.setup(t, env)
 			}
 
-			err := rm(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := rm(context.Background(), env)
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -137,15 +140,16 @@ func Test_rm_recursiveContinuesPastDeniedEntries(t *testing.T) {
 				require.NoError(t, os.WriteFile(filepath.Join(hostDir, rel), []byte("x"), 0644))
 			}
 
-			err := rm(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := rm(context.Background(), env)
 
 			if tc.wantExit == 0 {
 				require.NoError(t, err)
 				assert.Empty(t, stderr.String())
 			} else {
-				var ee exitError
+				var ee *command.ExitError
 				require.ErrorAs(t, err, &ee)
-				assert.Equal(t, tc.wantExit, ee.code)
+				assert.Equal(t, tc.wantExit, ee.Code)
 				assert.Contains(t, stderr.String(), tc.wantWarning)
 				assert.Contains(t, stderr.String(), "rm:")
 			}

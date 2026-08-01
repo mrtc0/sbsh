@@ -9,8 +9,8 @@ import (
 // treated as its magnitude, so "-n -K" also prints the last K lines. With no
 // arguments it reads stdin. For multiple files it prefixes each with a
 // "==> name <==" header.
-func tail(_ context.Context, env *Env, args []string) error {
-	n, files, err := parseLineCount(args, 10)
+func tail(_ context.Context, inv *Invocation) error {
+	n, files, err := parseLineCount(inv.Args, 10)
 	if err != nil {
 		return err
 	}
@@ -18,15 +18,15 @@ func tail(_ context.Context, env *Env, args []string) error {
 		files = []string{"-"}
 	}
 	for idx, f := range files {
-		b, err := readSource(env, f)
+		b, err := readSource(inv, f)
 		if err != nil {
 			return err
 		}
 		if len(files) > 1 {
 			if idx > 0 {
-				fmt.Fprintln(env.HC.Stdout)
+				fmt.Fprintln(inv.Stdout)
 			}
-			fmt.Fprintf(env.HC.Stdout, "==> %s <==\n", f)
+			fmt.Fprintf(inv.Stdout, "==> %s <==\n", f)
 		}
 		lines := splitLines(b)
 		count := n
@@ -38,7 +38,7 @@ func tail(_ context.Context, env *Env, args []string) error {
 			start = 0
 		}
 		for _, l := range lines[start:] {
-			fmt.Fprintln(env.HC.Stdout, l)
+			fmt.Fprintln(inv.Stdout, l)
 		}
 	}
 	return nil
