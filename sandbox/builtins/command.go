@@ -9,6 +9,7 @@ import (
 
 	"github.com/mrtc0/sh/v3/interp"
 
+	"github.com/mrtc0/sbsh/sandbox/command"
 	"github.com/mrtc0/sbsh/sandbox/python"
 	"github.com/mrtc0/sbsh/vfs"
 )
@@ -48,9 +49,12 @@ type Func func(ctx context.Context, env *Env, args []string) error
 
 // exitError is how a builtin reports a non-zero exit code. Builtins return it
 // instead of interp.ExitStatus so they don't depend on the shell backend:
-// ExecMiddleware is the single seam that translates the code into the backend's
+// exitCode is the single seam that translates the code into the backend's
 // representation. Because it carries an int, callers pass whatever their
 // underlying library produces without worrying about truncation here.
+//
+// It is the internal twin of [command.ExitError], which is what a custom
+// command returns; exitCode accepts either.
 type exitError struct{ code int }
 
 func (e exitError) Error() string { return fmt.Sprintf("exit status %d", uint8(e.code)) }
@@ -61,11 +65,79 @@ func exit(code int) error { return exitError{code} }
 type Options struct {
 	HTTP   *http.Client
 	Python python.Interpreter
+	// Commands are the custom commands the host registered, keyed by name. They
+	// take the same dispatch path as the builtins below — same lookup, same
+	// exit-code translation, same "command not found" — and the sandbox keeps
+	// the two sets of names disjoint, so which is consulted first is not
+	// observable.
+	Commands map[string]command.Command
 }
 
 var registry = map[string]Func{}
 
 func Register(name string, fn Func) { registry[name] = fn }
+
+// Registered reports whether name is a builtin. The sandbox uses it to refuse a
+// custom command that would shadow one.
+func Registered(name string) bool {
+	_, ok := registry[name]
+	return ok
+}
+
+// runner is one command's implementation, reduced to the shape dispatch needs.
+// Both a builtin and a custom command become one of these, so everything after
+// the lookup is common to them.
+type runner func(ctx context.Context, hc interp.HandlerContext, args []string) error
+
+// resolve finds the implementation of name among the builtins and the host's
+// custom commands.
+func resolve(name string, fsys vfs.FS, opts Options) (runner, bool) {
+	if fn, ok := registry[name]; ok {
+		return func(ctx context.Context, hc interp.HandlerContext, args []string) error {
+			env := &Env{Name: name, FS: fsys, HC: hc, HTTP: opts.HTTP, Python: opts.Python}
+			return fn(ctx, env, args)
+		}, true
+	}
+	if cmd, ok := opts.Commands[name]; ok {
+		return func(ctx context.Context, hc interp.HandlerContext, args []string) error {
+			return cmd.Run(ctx, &command.Invocation{
+				Name:   name,
+				Args:   args,
+				Dir:    hc.Dir,
+				Stdin:  hc.Stdin,
+				Stdout: hc.Stdout,
+				Stderr: hc.Stderr,
+				FS:     fsys,
+				HTTP:   opts.HTTP,
+			})
+		}, true
+	}
+	return nil, false
+}
+
+// exitCode reports the exit status a command asked for, if it asked for one.
+//
+// This is the single seam between a command's int exit code and the shell
+// backend's representation. interp.ExitStatus is a uint8, so a caller reduces
+// the code modulo 256 — matching how the OS reports process exit statuses, and
+// in exactly one place.
+func exitCode(err error) (int, bool) {
+	var builtinErr exitError
+	if errors.As(err, &builtinErr) {
+		return builtinErr.code, true
+	}
+	var customErr *command.ExitError
+	if errors.As(err, &customErr) {
+		return customErr.Code, true
+	}
+	// Defensive: a command may surface the backend's native exit status
+	// directly. It is already a uint8, so it passes through unchanged.
+	var exitStatus interp.ExitStatus
+	if errors.As(err, &exitStatus) {
+		return int(exitStatus), true
+	}
+	return 0, false
+}
 
 // ExecMiddleware returns an interp.ExecHandlerFunc that looks up the command in the registry and executes it.
 func ExecMiddleware(fsys vfs.FS, opts Options) func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
@@ -76,27 +148,15 @@ func ExecMiddleware(fsys vfs.FS, opts Options) func(next interp.ExecHandlerFunc)
 				return interp.ExitStatus(0)
 			}
 
-			fn, ok := registry[args[0]]
+			run, ok := resolve(args[0], fsys, opts)
 			if !ok {
 				fmt.Fprintf(hc.Stderr, "%s: command not found\n", args[0])
 				return interp.ExitStatus(127)
 			}
 
-			env := &Env{Name: args[0], FS: fsys, HC: hc, HTTP: opts.HTTP, Python: opts.Python}
-			if err := fn(ctx, env, args[1:]); err != nil {
-				// The single seam between a builtin's int exit code and the
-				// shell backend's representation. interp.ExitStatus is a uint8,
-				// so the code is reduced modulo 256 here — matching how the OS
-				// reports process exit statuses, and in exactly one place.
-				var ee exitError
-				if errors.As(err, &ee) {
-					return interp.ExitStatus(uint8(ee.code))
-				}
-				// Defensive: a builtin may surface the backend's native exit
-				// status directly. It is already a uint8, so pass it through.
-				var exitStatus interp.ExitStatus
-				if errors.As(err, &exitStatus) {
-					return exitStatus
+			if err := run(ctx, hc, args[1:]); err != nil {
+				if code, ok := exitCode(err); ok {
+					return interp.ExitStatus(uint8(code))
 				}
 				fmt.Fprintf(hc.Stderr, "%s: %v\n", args[0], err)
 				return interp.ExitStatus(1)

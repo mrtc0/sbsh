@@ -128,6 +128,77 @@ refuses to run.
 | `WithEnv(k, v)` | Add an environment variable |
 | `WithTimeout(d)` | Wall-clock limit per `Exec` (default 30s) |
 | `WithOutputLimit(n)` | Cap on captured stdout and stderr (default 4 MiB) |
+| `WithCommand(cmds...)` | Register custom commands written in Go |
+
+### Custom commands
+
+A host that needs a command sbsh does not ship writes it in Go and registers it
+on the sandbox. A registered command is dispatched exactly like a builtin: it
+appears in pipelines, its streams can be redirected, its exit status is the
+script's, and an unregistered name still prints `command not found`.
+
+The interface is three methods:
+
+```go
+type Command interface {
+	Name() string
+	Description() string
+	Run(ctx context.Context, inv *command.Invocation) error
+}
+```
+
+`command.New(name, description, fn)` builds one from a function when the command
+holds no state:
+
+```go
+sb, err := sandbox.New(ctx,
+	sandbox.WithCommand(command.New("slugify", "lower-case and hyphenate a line",
+		func(_ context.Context, inv *command.Invocation) error {
+			b, err := io.ReadAll(inv.Stdin)
+			if err != nil {
+				return err
+			}
+			slug := strings.Join(strings.Fields(strings.ToLower(string(b))), "-")
+			_, err = fmt.Fprintln(inv.Stdout, slug)
+			return err
+		})),
+)
+```
+
+`Invocation` is everything the command gets for one call, and nothing in it
+mentions the shell:
+
+| Field | What it is |
+|---|---|
+| `Name` | The command's own name, for prefixing its diagnostics |
+| `Args` | The arguments, without the name |
+| `Dir` | The working directory; `inv.Abs(p)` resolves an argument against it |
+| `Stdin`, `Stdout`, `Stderr` | The streams the shell wired up — a pipe, a redirect, or captured output |
+| `FS` | The sandbox filesystem, mounts resolved and deny patterns in force |
+| `HTTP` | The policy-checked client, `nil` when no network was allowed |
+
+`FS` and `HTTP` are the only ways out, the same two the builtins have: a command
+that reaches for `os` or `net/http` directly steps outside the sandbox, and
+registering it does not make that safe.
+
+Returning a plain error prints `name: message` on stderr and exits `1`, which is
+what a usage or I/O failure wants. A command with statuses of its own returns
+`command.Exit(code)` instead.
+
+Registration is per sandbox, not process-wide, so two sandboxes in one program
+can offer different commands. It fails at `New` — rather than silently later —
+when a command is nil, its name is not a plain word (`[A-Za-z0-9][A-Za-z0-9_.-]*`),
+its description is empty, or the name is already taken by a builtin, by a name
+the shell handles itself (`cd`, `echo`, …), or by another registered command.
+
+`Sandbox.Commands()` returns the registered commands sorted by name, for a host
+that wants to render its own listing; sbsh has no `help` command of its own.
+
+[examples/customcommand](examples/customcommand/main.go) is a complete program:
+a `wordfreq` command reading files and standard input, registered and then used
+in a script alongside the builtins. Dynamic loading and config-file
+registration are not supported — a custom command is Go code compiled into the
+host.
 
 ## Policies
 
@@ -203,7 +274,8 @@ and lookahead are unavailable.
 
 An unrecognized command prints `command not found` and exits `127`; it is never
 looked up on the host. An unsupported flag is an error rather than a silent
-no-op.
+no-op. A host can add commands of its own in Go — see
+[Custom commands](#custom-commands).
 
 `tar` and `patch` treat archive and patch member names as untrusted: a leading
 `/` is dropped so the member lands under the extraction root, and a name that

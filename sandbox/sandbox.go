@@ -17,6 +17,7 @@ import (
 
 	"github.com/mrtc0/sbsh/netpolicy"
 	"github.com/mrtc0/sbsh/sandbox/builtins"
+	"github.com/mrtc0/sbsh/sandbox/command"
 	"github.com/mrtc0/sbsh/sandbox/exitcode"
 	"github.com/mrtc0/sbsh/sandbox/python"
 	"github.com/mrtc0/sbsh/vfs"
@@ -41,6 +42,8 @@ type Sandbox struct {
 	netAllow    []string
 	httpClient  *http.Client
 	pyInterp    *python.WazeroInterpreter
+	// commands are the host's custom commands, keyed by name. See WithCommand.
+	commands map[string]command.Command
 
 	// mu serializes Exec, which shares runner across calls.
 	mu     sync.Mutex
@@ -211,7 +214,11 @@ func (s *Sandbox) newRunner() (*interp.Runner, error) {
 	return interp.New(
 		interp.Dir("/"),
 		interp.Env(expand.ListEnviron(s.env...)),
-		interp.ExecHandlers(builtins.ExecMiddleware(s.fs, builtins.Options{HTTP: s.httpClient, Python: s.pyInterp})),
+		interp.ExecHandlers(builtins.ExecMiddleware(s.fs, builtins.Options{
+			HTTP:     s.httpClient,
+			Python:   s.pyInterp,
+			Commands: s.commands,
+		})),
 		interp.OpenHandler(openHandler(s.fs)),
 		interp.ReadDirHandler2(readDirHandler(s.fs)),
 		interp.StatHandler(statHandler(s.fs)),
