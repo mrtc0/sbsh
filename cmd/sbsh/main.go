@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -109,11 +110,12 @@ func (e *exitError) Error() string { return fmt.Sprintf("exit code %d", e.code) 
 // flags holds what the command line asked for, before it is turned into
 // sandbox options.
 type flags struct {
-	script    string
-	mounts    []string
-	denyPaths []string
-	allowNet  []string
-	timeout   string
+	script      string
+	mounts      []string
+	denyPaths   []string
+	allowNet    []string
+	timeout     string
+	outputLimit string
 }
 
 func newRootCmd(interrupts <-chan struct{}) *cobra.Command {
@@ -161,6 +163,8 @@ func newRootCmd(interrupts <-chan struct{}) *cobra.Command {
 		"Allow network access to a host name, a \"*.\" wildcard host name, an IP address or a CIDR block. Without this flag the sandbox has no network access (multiple allowed)")
 	cmd.Flags().StringVar(&f.timeout, "timeout", "",
 		"Stop a script that has run for longer than DURATION, given in Go duration syntax (for example \"500ms\", \"30s\" or \"1m\"). \"0\" lets a script run without a deadline (default \"30s\")")
+	cmd.Flags().StringVar(&f.outputLimit, "output-limit", "",
+		"Capture at most BYTES of stdout and BYTES of stderr per script, given as a whole number of bytes (for example \"1048576\"). Output past the limit is discarded and reported (default \"4194304\", 4 MiB)")
 
 	return cmd
 }
@@ -193,6 +197,16 @@ func (f flags) options() ([]sandbox.Option, error) {
 			return nil, fmt.Errorf("invalid --timeout %q: a duration cannot be negative", f.timeout)
 		}
 		opts = append(opts, sandbox.WithTimeout(d))
+	}
+	if f.outputLimit != "" {
+		n, err := strconv.ParseInt(f.outputLimit, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid --output-limit %q: want a whole number of bytes such as \"1048576\"", f.outputLimit)
+		}
+		if n <= 0 {
+			return nil, fmt.Errorf("invalid --output-limit %q: a byte limit must be greater than zero", f.outputLimit)
+		}
+		opts = append(opts, sandbox.WithOutputLimit(n))
 	}
 	return opts, nil
 }

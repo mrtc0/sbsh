@@ -235,7 +235,7 @@ func printResult(res *sandbox.Result, out, errw io.Writer) {
 	fmt.Fprint(out, res.Stdout)
 	fmt.Fprint(errw, res.Stderr)
 	if res.Truncated {
-		fmt.Fprintln(errw, "(output truncated)")
+		fmt.Fprintln(errw, "(output truncated: the script wrote past the output limit; raise it with --output-limit)")
 	}
 	if res.ExitCode != 0 {
 		fmt.Fprintf(errw, "(exit code %d)\n", res.ExitCode)
