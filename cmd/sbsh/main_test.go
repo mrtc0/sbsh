@@ -42,14 +42,19 @@ func TestFlags_options(t *testing.T) {
 			flags:   flags{timeout: "0"},
 			wantLen: 1,
 		},
+		"an output limit becomes one option": {
+			flags:   flags{outputLimit: "1048576"},
+			wantLen: 1,
+		},
 		"every kind of flag together": {
 			flags: flags{
-				mounts:    []string{"/host/dir:/work"},
-				denyPaths: []string{"**/.env"},
-				allowNet:  []string{"example.com"},
-				timeout:   "500ms",
+				mounts:      []string{"/host/dir:/work"},
+				denyPaths:   []string{"**/.env"},
+				allowNet:    []string{"example.com"},
+				timeout:     "500ms",
+				outputLimit: "1048576",
 			},
-			wantLen: 4,
+			wantLen: 5,
 		},
 		"a mount without a virtual path is rejected": {
 			flags:   flags{mounts: []string{"/host/dir"}},
@@ -66,6 +71,18 @@ func TestFlags_options(t *testing.T) {
 		"a negative timeout is rejected": {
 			flags:   flags{timeout: "-1s"},
 			wantErr: "cannot be negative",
+		},
+		"an output limit that is not a number is rejected": {
+			flags:   flags{outputLimit: "1MiB"},
+			wantErr: `invalid --output-limit "1MiB": want a whole number of bytes`,
+		},
+		"a zero output limit is rejected": {
+			flags:   flags{outputLimit: "0"},
+			wantErr: "must be greater than zero",
+		},
+		"a negative output limit is rejected": {
+			flags:   flags{outputLimit: "-1"},
+			wantErr: "must be greater than zero",
 		},
 	}
 

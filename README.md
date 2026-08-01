@@ -54,6 +54,8 @@ sbsh [flags]
       --allow-net stringArray Allow network access to a host name, "*." wildcard, IP, or CIDR
       --timeout string        Stop a script that runs longer than this, e.g. "500ms", "30s", "1m"
                               ("0" removes the deadline; default "30s")
+      --output-limit string   Capture at most this many bytes of stdout and of stderr
+                              per script (default 4194304, 4 MiB)
   -v, --version               Print the version
 ```
 
@@ -223,18 +225,15 @@ Per `Exec` call:
   can tell "stopped" from "failed on its own" without treating a limit it asked
   for as a sandbox failure.
 - **Output** — stdout and stderr are captured in memory and capped at 4 MiB each
-  by default (`WithOutputLimit`). Past the cap, output is discarded and
-  `Result.Truncated` is set; the REPL prints `(output truncated)`. Truncation is
-  never reported as success.
+  by default (`WithOutputLimit`, or `--output-limit` on the CLI). Past the cap,
+  output is discarded and `Result.Truncated` is set; the REPL says so on stderr.
+  Truncation is never reported as success.
 - **Serialization** — `Exec` holds a lock, so concurrent callers queue. A sandbox
   is one shell session, not a pool.
 - **No bytecode cache** — every `python` invocation compiles the modules it imports
   from source. The standard library is mounted read-only and no `.pyc` is shipped,
   because a committed one could never be accepted: its recorded source timestamp
   cannot match a tree that is copied into memory at startup.
-
-Neither the timeout nor the output limit is exposed as a CLI flag today; they are
-Go API options.
 
 Not implemented:
 
