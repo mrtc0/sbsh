@@ -1,12 +1,13 @@
 # sbsh
 
-An in-process sandboxed shell for AI agents.
+sbsh is a sandboxed shell/runtime for AI agents.
+It gives agents a constrained environment for safe local work on mounted files and approved network destinations.
+Instead of exposing the host shell directly, sbsh provides a predictable execution boundary for investigation, transformation, and lightweight automation.
+It is designed for embedding into agentic tools and AI systems that need controlled shell-like execution.
 
-`sbsh` runs shell scripts — pipelines, redirections, globs, heredocs, functions,
-and Python — without ever spawning a host process. Commands are Go functions
-against a virtual filesystem; Python is CPython compiled to WebAssembly and run
-under [wazero](https://wazero.io). There is no `fork`, no `exec`, and no `PATH`
-lookup on the host.
+`sbsh` runs shell scripts — pipelines, redirections, globs, heredocs, functions, and Python — without ever spawning a host process.
+Commands are Go functions against a virtual filesystem; Python is CPython compiled to WebAssembly and run under [wazero](https://wazero.io).
+There is no `fork`, no `exec`, and no `PATH` lookup on the host.
 
 Two things reach the host, and both are closed by default:
 
