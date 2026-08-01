@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path"
 
+	"github.com/mrtc0/sh/v3/expand"
 	"github.com/mrtc0/sh/v3/interp"
 
 	"github.com/mrtc0/sbsh/sandbox/command"
@@ -107,12 +108,26 @@ func resolve(name string, fsys vfs.FS, opts Options) (runner, bool) {
 				Stdin:  hc.Stdin,
 				Stdout: hc.Stdout,
 				Stderr: hc.Stderr,
+				Env:    lookupEnv(hc.Env),
 				FS:     fsys,
 				HTTP:   opts.HTTP,
 			})
 		}, true
 	}
 	return nil, false
+}
+
+// lookupEnv adapts the shell's environment to the lookup a [command.Invocation]
+// carries. Only plain string variables are reported: an array has no single
+// value to hand back, so it reads as unset.
+func lookupEnv(env expand.Environ) func(string) (string, bool) {
+	return func(name string) (string, bool) {
+		vr := env.Get(name)
+		if !vr.IsSet() || vr.Kind != expand.String {
+			return "", false
+		}
+		return vr.Str, true
+	}
 }
 
 // exitCode reports the exit status a command asked for, if it asked for one.

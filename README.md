@@ -174,6 +174,7 @@ mentions the shell:
 | `Args` | The arguments, without the name |
 | `Dir` | The working directory; `inv.Abs(p)` resolves an argument against it |
 | `Stdin`, `Stdout`, `Stderr` | The streams the shell wired up — a pipe, a redirect, or captured output |
+| `Env` | Variable lookup as the script sees it, including `LANG=C mycmd` assignments; `inv.Getenv(name)` when unset and empty need not differ |
 | `FS` | The sandbox filesystem, mounts resolved and deny patterns in force |
 | `HTTP` | The policy-checked client, `nil` when no network was allowed |
 
@@ -189,7 +190,10 @@ Registration is per sandbox, not process-wide, so two sandboxes in one program
 can offer different commands. It fails at `New` — rather than silently later —
 when a command is nil, its name is not a plain word (`[A-Za-z0-9][A-Za-z0-9_.-]*`),
 its description is empty, or the name is already taken by a builtin, by a name
-the shell handles itself (`cd`, `echo`, …), or by another registered command.
+the shell handles itself (`cd`, `time`, `if`, …), or by another registered
+command. Each of those could never be reached: a script starting with `if` does
+not parse, and `time` would measure what follows it rather than run the
+registration.
 
 `Sandbox.Commands()` returns the registered commands sorted by name, for a host
 that wants to render its own listing; sbsh has no `help` command of its own.

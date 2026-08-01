@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mrtc0/sh/v3/interp"
+	"github.com/mrtc0/sh/v3/syntax"
 
 	"github.com/mrtc0/sbsh/sandbox/builtins"
 	"github.com/mrtc0/sbsh/sandbox/command"
@@ -57,7 +58,10 @@ func (s *Sandbox) addCommand(cmd command.Command) error {
 		return fmt.Errorf("registering command %q: description is empty", name)
 	case builtins.Registered(name):
 		return fmt.Errorf("registering command %q: a builtin already has that name", name)
-	case interp.IsBuiltin(name):
+	case interp.IsBuiltin(name), syntax.IsKeyword(name):
+		// A keyword is not a command at all: a script starting with "if" or
+		// "function" fails to parse, and "time" measures what follows it. Either
+		// way the registered command could never run.
 		return fmt.Errorf("registering command %q: the shell handles that name itself", name)
 	}
 	if _, ok := s.commands[name]; ok {

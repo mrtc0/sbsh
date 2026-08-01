@@ -59,6 +59,22 @@ func TestInvocation_Abs(t *testing.T) {
 	}
 }
 
+func TestInvocation_Getenv(t *testing.T) {
+	t.Parallel()
+
+	set := map[string]string{"HOME": "/home/user", "EMPTY": ""}
+	inv := &command.Invocation{Env: func(name string) (string, bool) {
+		v, ok := set[name]
+		return v, ok
+	}}
+	assert.Equal(t, "/home/user", inv.Getenv("HOME"))
+	assert.Equal(t, "", inv.Getenv("EMPTY"))
+	assert.Equal(t, "", inv.Getenv("MISSING"))
+
+	// A host driving Run directly need not wire an environment up.
+	assert.Equal(t, "", (&command.Invocation{}).Getenv("HOME"))
+}
+
 func TestExit(t *testing.T) {
 	t.Parallel()
 

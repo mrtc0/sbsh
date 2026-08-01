@@ -58,6 +58,16 @@ type Invocation struct {
 	Stdout io.Writer
 	Stderr io.Writer
 
+	// Env looks up an environment variable as the script sees it, which includes
+	// the assignments written in front of the command itself ("LANG=C mycmd").
+	// The second result reports whether the variable is set, telling an unset
+	// variable apart from one set to the empty string.
+	//
+	// The sandbox always installs it; it is exported so a host can drive Run
+	// directly in its own tests. Prefer [Invocation.Getenv], which is also
+	// correct when it is nil.
+	Env func(name string) (value string, ok bool)
+
 	// FS is the sandbox filesystem, with the mounts resolved and the deny
 	// patterns in force. It implements afero.Fs, so afero's helpers apply. It is
 	// the only filesystem a command may touch: reaching for os directly steps
@@ -78,6 +88,16 @@ func (inv *Invocation) Abs(p string) string {
 		p = path.Join(inv.Dir, p)
 	}
 	return vfs.Normalize(p)
+}
+
+// Getenv returns the value of the environment variable name, or the empty string
+// when it is unset. Use [Invocation.Env] directly to tell the two apart.
+func (inv *Invocation) Getenv(name string) string {
+	if inv.Env == nil {
+		return ""
+	}
+	v, _ := inv.Env(name)
+	return v
 }
 
 // ExitError is how a command reports a non-zero exit status. Returning any

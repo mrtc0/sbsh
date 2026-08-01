@@ -56,6 +56,12 @@ func TestSandbox_CustomCommand(t *testing.T) {
 			wantStdout: "content\n",
 		},
 		{
+			name:       "a registered command reads the environment the script sees",
+			cmds:       []command.Command{showEnv()},
+			script:     "export EXPORTED=1; LANG=C showenv EXPORTED LANG NOPE",
+			wantStdout: "EXPORTED=1|LANG=C|NOPE=<unset>\n",
+		},
+		{
 			name:     "a registered command decides the exit status",
 			cmds:     []command.Command{failing(3)},
 			script:   "fail",
@@ -176,6 +182,18 @@ func TestNew_RejectsInvalidCommand(t *testing.T) {
 			wantErr: "the shell handles that name itself",
 		},
 		{
+			// "time" is the name that would otherwise register and then be
+			// swallowed silently: the shell measures what follows it.
+			name:    "name of a keyword",
+			cmds:    []command.Command{command.New("time", "a better time", nil)},
+			wantErr: "the shell handles that name itself",
+		},
+		{
+			name:    "name of a keyword that breaks parsing",
+			cmds:    []command.Command{command.New("if", "a better if", nil)},
+			wantErr: "the shell handles that name itself",
+		},
+		{
 			name:    "duplicate name",
 			cmds:    []command.Command{upper(), command.New("upper", "another one", nil)},
 			wantErr: "already registered",
@@ -210,6 +228,21 @@ func upper() command.Command {
 			return err
 		}
 		_, err = io.WriteString(inv.Stdout, strings.ToUpper(string(b)))
+		return err
+	})
+}
+
+func showEnv() command.Command {
+	return command.New("showenv", "print the named environment variables", func(_ context.Context, inv *command.Invocation) error {
+		parts := make([]string, 0, len(inv.Args))
+		for _, name := range inv.Args {
+			value, ok := inv.Env(name)
+			if !ok {
+				value = "<unset>"
+			}
+			parts = append(parts, name+"="+value)
+		}
+		_, err := fmt.Fprintln(inv.Stdout, strings.Join(parts, "|"))
 		return err
 	})
 }
