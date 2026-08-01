@@ -34,13 +34,22 @@ func TestFlags_options(t *testing.T) {
 			flags:   flags{allowNet: []string{"example.com", "10.0.1.1/24"}},
 			wantLen: 1,
 		},
+		"a timeout becomes one option": {
+			flags:   flags{timeout: "1m"},
+			wantLen: 1,
+		},
+		"a zero timeout is still an option, and lifts the deadline": {
+			flags:   flags{timeout: "0"},
+			wantLen: 1,
+		},
 		"every kind of flag together": {
 			flags: flags{
 				mounts:    []string{"/host/dir:/work"},
 				denyPaths: []string{"**/.env"},
 				allowNet:  []string{"example.com"},
+				timeout:   "500ms",
 			},
-			wantLen: 3,
+			wantLen: 4,
 		},
 		"a mount without a virtual path is rejected": {
 			flags:   flags{mounts: []string{"/host/dir"}},
@@ -49,6 +58,14 @@ func TestFlags_options(t *testing.T) {
 		"an unknown mount qualifier is rejected": {
 			flags:   flags{mounts: []string{"/host/dir:/work:rw"}},
 			wantErr: "invalid --mount",
+		},
+		"a timeout that is not a duration is rejected": {
+			flags:   flags{timeout: "30"},
+			wantErr: `invalid --timeout "30": want a duration`,
+		},
+		"a negative timeout is rejected": {
+			flags:   flags{timeout: "-1s"},
+			wantErr: "cannot be negative",
 		},
 	}
 

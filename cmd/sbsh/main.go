@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/mrtc0/sbsh/internal/repl"
 	"github.com/mrtc0/sbsh/sandbox"
@@ -112,6 +113,7 @@ type flags struct {
 	mounts    []string
 	denyPaths []string
 	allowNet  []string
+	timeout   string
 }
 
 func newRootCmd(interrupts <-chan struct{}) *cobra.Command {
@@ -157,6 +159,8 @@ func newRootCmd(interrupts <-chan struct{}) *cobra.Command {
 		"Refuse access to paths matching PATTERN, on top of the mounts. \"*\" stays within one path segment, \"**\" spans any number of them, and a pattern that does not start with \"/\" applies at any depth. Denying a directory denies everything below it (multiple allowed)")
 	cmd.Flags().StringArrayVar(&f.allowNet, "allow-net", nil,
 		"Allow network access to a host name, a \"*.\" wildcard host name, an IP address or a CIDR block. Without this flag the sandbox has no network access (multiple allowed)")
+	cmd.Flags().StringVar(&f.timeout, "timeout", "",
+		"Stop a script that has run for longer than DURATION, given in Go duration syntax (for example \"500ms\", \"30s\" or \"1m\"). \"0\" lets a script run without a deadline (default \"30s\")")
 
 	return cmd
 }
@@ -179,6 +183,16 @@ func (f flags) options() ([]sandbox.Option, error) {
 	}
 	if len(f.allowNet) > 0 {
 		opts = append(opts, sandbox.WithNetworkAllow(f.allowNet...))
+	}
+	if f.timeout != "" {
+		d, err := time.ParseDuration(f.timeout)
+		if err != nil {
+			return nil, fmt.Errorf("invalid --timeout %q: want a duration such as \"500ms\", \"30s\" or \"1m\"", f.timeout)
+		}
+		if d < 0 {
+			return nil, fmt.Errorf("invalid --timeout %q: a duration cannot be negative", f.timeout)
+		}
+		opts = append(opts, sandbox.WithTimeout(d))
 	}
 	return opts, nil
 }

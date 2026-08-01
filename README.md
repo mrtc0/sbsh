@@ -52,6 +52,8 @@ sbsh [flags]
       --mount stringArray     HOST:VPATH[:ro] — expose a host directory at a virtual path
       --deny-path stringArray Refuse access to paths matching PATTERN
       --allow-net stringArray Allow network access to a host name, "*." wildcard, IP, or CIDR
+      --timeout string        Stop a script that runs longer than this, e.g. "500ms", "30s", "1m"
+                              ("0" removes the deadline; default "30s")
   -v, --version               Print the version
 ```
 
