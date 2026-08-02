@@ -9,11 +9,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mrtc0/sh/v3/expand"
+	"github.com/mrtc0/sh/v3/interp"
+	"github.com/mrtc0/sh/v3/syntax"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/mrtc0/sh/v3/interp"
-	"github.com/mrtc0/sh/v3/syntax"
 
 	"github.com/mrtc0/sbsh/vfs"
 )
@@ -31,6 +32,7 @@ func NewTestEnv(t *testing.T, dir string) (*Env, *bytes.Buffer, *bytes.Buffer) {
 			Stdout: stdout,
 			Stderr: stderr,
 		},
+		Env: NewEnviron(expand.ListEnviron()),
 	}
 	return env, stdout, stderr
 }
@@ -55,6 +57,7 @@ func NewTestEnvWithDeny(t *testing.T, dir, cmd string, patterns ...string) (*Env
 			Stdout: stdout,
 			Stderr: stderr,
 		},
+		Env: NewEnviron(expand.ListEnviron()),
 	}
 	return env, base, stdout, stderr
 }
@@ -88,6 +91,7 @@ func NewTestEnvWithHostMount(t *testing.T, cmd string, patterns ...string) (*Env
 			Stdout: stdout,
 			Stderr: stderr,
 		},
+		Env: NewEnviron(expand.ListEnviron()),
 	}
 	return env, hostDir, stdout, stderr
 }
@@ -283,4 +287,60 @@ func TestExecMiddleware(t *testing.T) {
 			assert.Equal(t, tc.wantNextCalled, res.nextCalled, "next (real exec) must not be reached")
 		})
 	}
+}
+
+func TestShellEnviron(t *testing.T) {
+	t.Parallel()
+
+	// EMPTY is set to the empty string, so Lookup must report ok for it while
+	// reporting !ok for a name that was never set: the two are different to a
+	// command that treats "set at all" as the signal.
+	env := NewEnviron(expand.ListEnviron("NAME=value", "EMPTY="))
+
+	value, ok := env.Lookup("NAME")
+	assert.True(t, ok)
+	assert.Equal(t, "value", value)
+
+	value, ok = env.Lookup("EMPTY")
+	assert.True(t, ok, "a variable set to the empty string is still set")
+	assert.Equal(t, "", value)
+
+	value, ok = env.Lookup("MISSING")
+	assert.False(t, ok)
+	assert.Equal(t, "", value)
+
+	assert.ElementsMatch(t, []string{"NAME=value", "EMPTY="}, env.All())
+}
+
+// arrayEnviron reports ARR as an array variable, which has no single value to
+// render, alongside a plain string.
+type arrayEnviron struct{ expand.Environ }
+
+func (arrayEnviron) Get(name string) expand.Variable {
+	switch name {
+	case "ARR":
+		return expand.Variable{Set: true, Kind: expand.Indexed, List: []string{"a", "b"}}
+	case "STR":
+		return expand.Variable{Set: true, Kind: expand.String, Str: "s"}
+	}
+	return expand.Variable{}
+}
+
+func (a arrayEnviron) Each(fn func(name string, vr expand.Variable) bool) {
+	for _, name := range []string{"ARR", "STR"} {
+		if !fn(name, a.Get(name)) {
+			return
+		}
+	}
+}
+
+func TestShellEnviron_ExcludesArrays(t *testing.T) {
+	t.Parallel()
+
+	env := NewEnviron(arrayEnviron{expand.ListEnviron()})
+
+	assert.Equal(t, []string{"STR=s"}, env.All())
+
+	_, ok := env.Lookup("ARR")
+	assert.False(t, ok, "an array has no single value to return")
 }
