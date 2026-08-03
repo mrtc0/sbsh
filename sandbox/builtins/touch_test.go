@@ -64,7 +64,8 @@ func Test_touch(t *testing.T) {
 				tc.setup(t, env)
 			}
 
-			err := touch(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := touch(context.Background(), env)
 			if tc.wantErr {
 				require.Error(t, err)
 				return

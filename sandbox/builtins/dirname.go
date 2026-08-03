@@ -9,11 +9,11 @@ import (
 // dirname prints the directory portion of each path argument, one per line.
 //
 //	dirname path...
-func dirname(_ context.Context, env *Env, args []string) error {
-	if len(args) == 0 {
+func dirname(_ context.Context, env *Env) error {
+	if len(env.Args) == 0 {
 		return fmt.Errorf("usage: dirname path...")
 	}
-	for _, p := range args {
+	for _, p := range env.Args {
 		trimmed := stripTrailingSlashes(p)
 		if trimmed == "" {
 			fmt.Fprintln(env.Stdout, "/")

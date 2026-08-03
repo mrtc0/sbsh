@@ -13,11 +13,11 @@ import (
 )
 
 // rm removes files and directories. -r recurses; -f does not error when the target is missing.
-func rm(_ context.Context, env *Env, args []string) error {
+func rm(_ context.Context, env *Env) error {
 	flags := NewFlagSet()
 	recursive := flags.Bool("-r", "-R")
 	force := flags.Bool("-f")
-	paths, err := flags.Parse(args)
+	paths, err := flags.Parse(env.Args)
 	if err != nil {
 		return err
 	}

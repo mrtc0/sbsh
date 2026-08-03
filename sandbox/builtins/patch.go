@@ -26,11 +26,11 @@ import (
 // any of those reasons leaves no partial edit behind and reports nothing as
 // patched. What the write phase cannot promise is the filesystem: a write that
 // fails on its own, leaves the files written before it in place.
-func patchCommand(_ context.Context, env *Env, args []string) error {
+func patchCommand(_ context.Context, env *Env) error {
 	fs := NewFlagSet()
 	patchFileFlag := fs.String("", "-i")
 	stripFlag := fs.String("0", "-p")
-	operands, err := fs.Parse(args)
+	operands, err := fs.Parse(env.Args)
 	if err != nil {
 		return err
 	}

@@ -112,7 +112,8 @@ func Test_curl(t *testing.T) {
 			env, stdout, _ := NewTestEnv(t, "/work")
 			env.HTTP = &http.Client{}
 
-			err := curl(context.Background(), env, append(tc.args, srv.URL+tc.path))
+			env.Args = append(tc.args, srv.URL+tc.path)
+			err := curl(context.Background(), env)
 
 			if tc.wantExit != 0 {
 				var ee exitError
@@ -214,7 +215,8 @@ func Test_curlRequest(t *testing.T) {
 				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			require.NoError(t, curl(context.Background(), env, append(tc.args, srv.URL+"/")))
+			env.Args = append(tc.args, srv.URL+"/")
+			require.NoError(t, curl(context.Background(), env))
 
 			assert.Equal(t, tc.wantMethod, got.method, "method")
 			assert.Equal(t, tc.wantBody, got.body, "body")
@@ -265,7 +267,8 @@ func Test_curlRejects(t *testing.T) {
 				env.HTTP = &http.Client{}
 			}
 
-			err := curl(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := curl(context.Background(), env)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.wantErrMsg)
 		})

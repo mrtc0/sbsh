@@ -90,7 +90,8 @@ func Test_find(t *testing.T) {
 				mustMkdir(t, env.FS, dir)
 			}
 
-			err := find(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := find(context.Background(), env)
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -135,7 +136,8 @@ func Test_find_continuesPastDeniedEntries(t *testing.T) {
 				mustWrite(t, base, p, body)
 			}
 
-			err := find(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := find(context.Background(), env)
 
 			var ee exitError
 			require.ErrorAs(t, err, &ee)

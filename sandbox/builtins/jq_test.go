@@ -81,7 +81,8 @@ func Test_jq(t *testing.T) {
 				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			require.NoError(t, jqCommand(context.Background(), env, tc.args))
+			env.Args = tc.args
+			require.NoError(t, jqCommand(context.Background(), env))
 			assert.Equal(t, tc.want, stdout.String())
 		})
 	}
@@ -125,7 +126,8 @@ func Test_jq_exitStatus(t *testing.T) {
 			env, _, _ := NewTestEnv(t, "/work")
 			env.Stdin = strings.NewReader(tc.stdin)
 
-			err := jqCommand(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := jqCommand(context.Background(), env)
 			if tc.ok {
 				require.NoError(t, err)
 				return
@@ -143,13 +145,15 @@ func Test_jq_errors(t *testing.T) {
 	t.Run("no filter", func(t *testing.T) {
 		t.Parallel()
 		env, _, _ := NewTestEnv(t, "/work")
-		require.Error(t, jqCommand(context.Background(), env, nil))
+		env.Args = nil
+		require.Error(t, jqCommand(context.Background(), env))
 	})
 
 	t.Run("invalid filter", func(t *testing.T) {
 		t.Parallel()
 		env, _, _ := NewTestEnv(t, "/work")
 		env.Stdin = strings.NewReader(`{}`)
-		require.Error(t, jqCommand(context.Background(), env, []string{".["}))
+		env.Args = []string{".["}
+		require.Error(t, jqCommand(context.Background(), env))
 	})
 }

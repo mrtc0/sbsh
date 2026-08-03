@@ -77,7 +77,8 @@ func Test_cp(t *testing.T) {
 				tc.setup(t, env)
 			}
 
-			err := cp(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := cp(context.Background(), env)
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -110,7 +111,8 @@ func Test_cp_recursiveOnAHostMount(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(hostDir, "src/a.txt"), []byte("1"), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(hostDir, "src/sub/b.txt"), []byte("2"), 0644))
 
-	require.NoError(t, cp(context.Background(), env, []string{"-r", "/work/src", "/work/dst"}))
+	env.Args = []string{"-r", "/work/src", "/work/dst"}
+	require.NoError(t, cp(context.Background(), env))
 
 	got, err := os.ReadFile(filepath.Join(hostDir, "dst/a.txt"))
 	require.NoError(t, err)
@@ -130,7 +132,8 @@ func Test_cp_recursiveContinuesPastDeniedEntries(t *testing.T) {
 	mustWrite(t, base, "/work/src/a.txt", "1")
 	mustWrite(t, base, "/work/src/sub/b.txt", "2")
 
-	err := cp(context.Background(), env, []string{"-r", "/work/src", "/work/dst"})
+	env.Args = []string{"-r", "/work/src", "/work/dst"}
+	err := cp(context.Background(), env)
 
 	var ee exitError
 	require.ErrorAs(t, err, &ee)

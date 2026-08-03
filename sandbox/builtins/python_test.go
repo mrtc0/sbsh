@@ -58,7 +58,8 @@ func TestPythonCommand_Invocation(t *testing.T) {
 				require.NoError(t, afero.WriteFile(env.FS, path, []byte(body), 0o644))
 			}
 
-			require.NoError(t, pythonCommand(context.Background(), env, tc.args))
+			env.Args = tc.args
+			require.NoError(t, pythonCommand(context.Background(), env))
 
 			assert.Equal(t, tc.wantCode, fp.got.Code, "Code must be verbatim (no prelude)")
 			assert.Equal(t, tc.wantArgv, fp.got.Argv)
@@ -75,7 +76,8 @@ func TestPythonCommand_PassesEnvironment(t *testing.T) {
 	fp := &fakePython{}
 	env.Python = fp
 
-	require.NoError(t, pythonCommand(context.Background(), env, []string{"-c", "pass"}))
+	env.Args = []string{"-c", "pass"}
+	require.NoError(t, pythonCommand(context.Background(), env))
 
 	assert.ElementsMatch(t, []string{"FOO=bar", "EMPTY="}, fp.got.Env)
 }

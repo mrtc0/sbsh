@@ -14,24 +14,24 @@ import (
 //
 //	-name PATTERN  base name matches the glob / -type f|d  filter by file kind
 //	find [path...] [-name pattern] [-type f|d]
-func find(_ context.Context, env *Env, args []string) error {
+func find(_ context.Context, env *Env) error {
 	var roots []string
 	var namePat, typ string
-	for i := 0; i < len(args); i++ {
-		a := args[i]
+	for i := 0; i < len(env.Args); i++ {
+		a := env.Args[i]
 		switch a {
 		case "-name":
 			i++
-			if i >= len(args) {
+			if i >= len(env.Args) {
 				return fmt.Errorf("-name requires an argument")
 			}
-			namePat = args[i]
+			namePat = env.Args[i]
 		case "-type":
 			i++
-			if i >= len(args) {
+			if i >= len(env.Args) {
 				return fmt.Errorf("-type requires an argument")
 			}
-			typ = args[i]
+			typ = env.Args[i]
 			if typ != "f" && typ != "d" {
 				return fmt.Errorf("invalid -type %q (want f or d)", typ)
 			}

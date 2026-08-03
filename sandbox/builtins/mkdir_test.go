@@ -60,7 +60,8 @@ func Test_mkdir(t *testing.T) {
 				tc.setup(t, env)
 			}
 
-			err := mkdir(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := mkdir(context.Background(), env)
 			if tc.wantErr {
 				require.Error(t, err)
 				return

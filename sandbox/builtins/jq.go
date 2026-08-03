@@ -17,14 +17,14 @@ import (
 //	-c compact output / -r raw string output / -n null input
 //	-s slurp all inputs into a single array / -e set exit status from the last output
 //	jq [-cnrse] filter [file...]
-func jqCommand(ctx context.Context, env *Env, args []string) error {
+func jqCommand(ctx context.Context, env *Env) error {
 	fs := NewFlagSet()
 	compactFlag := fs.Bool("-c", "--compact-output")
 	rawFlag := fs.Bool("-r", "--raw-output")
 	nullInputFlag := fs.Bool("-n", "--null-input")
 	slurpFlag := fs.Bool("-s", "--slurp")
 	exitStatusFlag := fs.Bool("-e", "--exit-status")
-	rest, err := fs.Parse(args)
+	rest, err := fs.Parse(env.Args)
 	if err != nil {
 		return err
 	}

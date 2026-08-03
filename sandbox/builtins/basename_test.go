@@ -32,7 +32,8 @@ func Test_basename(t *testing.T) {
 			t.Parallel()
 
 			env, stdout, _ := NewTestEnv(t, "/work")
-			err := basename(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := basename(context.Background(), env)
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -64,7 +65,8 @@ func Test_dirname(t *testing.T) {
 			t.Parallel()
 
 			env, stdout, _ := NewTestEnv(t, "/work")
-			err := dirname(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := dirname(context.Background(), env)
 			if tc.wantErr {
 				require.Error(t, err)
 				return

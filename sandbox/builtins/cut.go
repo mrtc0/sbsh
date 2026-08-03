@@ -16,13 +16,13 @@ import (
 //	-s with -f, skip lines that contain no delimiter
 //	cut -f LIST [-d DELIM] [-s] [file...]
 //	cut -c LIST [file...]
-func cut(_ context.Context, env *Env, args []string) error {
+func cut(_ context.Context, env *Env) error {
 	fs := NewFlagSet()
 	fieldsSpec := fs.String("", "-f")
 	charsSpec := fs.String("", "-c")
 	delimFlag := fs.String("\t", "-d")
 	onlyDelim := fs.Bool("-s", "--only-delimited")
-	files, err := fs.Parse(args)
+	files, err := fs.Parse(env.Args)
 	if err != nil {
 		return err
 	}

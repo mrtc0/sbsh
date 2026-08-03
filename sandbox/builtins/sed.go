@@ -27,14 +27,14 @@ import (
 // (whole match), \1..\9 (capture groups), \n and \t. -i edits files in place;
 // otherwise the result is written to stdout. The "No newline at end of file"
 // convention is not emitted, but a missing trailing newline is preserved.
-func sedCommand(_ context.Context, env *Env, args []string) error {
+func sedCommand(_ context.Context, env *Env) error {
 	// The script (when no -e is given) is the first operand, so stop scanning
 	// options there and treat the rest as the script and files.
 	fs := NewFlagSet().StopAtFirstOperand()
 	quietFlag := fs.Bool("-n")
 	inPlaceFlag := fs.Bool("-i")
 	exprFlags := fs.StringList("-e")
-	rest, err := fs.Parse(args)
+	rest, err := fs.Parse(env.Args)
 	if err != nil {
 		return err
 	}

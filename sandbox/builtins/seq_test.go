@@ -35,7 +35,8 @@ func Test_seq(t *testing.T) {
 			t.Parallel()
 
 			env, stdout, _ := NewTestEnv(t, "/work")
-			err := seq(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := seq(context.Background(), env)
 			if tc.wantErr {
 				require.Error(t, err)
 				return

@@ -86,7 +86,8 @@ func Test_head(t *testing.T) {
 				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			err := head(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := head(context.Background(), env)
 			if tc.wantErr {
 				require.Error(t, err)
 				return

@@ -8,12 +8,12 @@ import (
 
 // wc counts lines, words, and bytes. -l/-w/-c select what to count (all when unspecified).
 // With no arguments it reads stdin. For multiple files it prints a trailing total.
-func wc(_ context.Context, env *Env, args []string) error {
+func wc(_ context.Context, env *Env) error {
 	fs := NewFlagSet()
 	showLinesFlag := fs.Bool("-l")
 	showWordsFlag := fs.Bool("-w")
 	showBytesFlag := fs.Bool("-c")
-	files, err := fs.Parse(args)
+	files, err := fs.Parse(env.Args)
 	if err != nil {
 		return err
 	}

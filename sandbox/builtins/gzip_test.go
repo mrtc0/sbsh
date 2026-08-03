@@ -37,7 +37,8 @@ func Test_gzip_stdinToStdout(t *testing.T) {
 
 	env, stdout, _ := NewTestEnv(t, "/work")
 	env.Stdin = strings.NewReader("hello gzip")
-	require.NoError(t, gzipCommand(context.Background(), env, nil))
+	env.Args = nil
+	require.NoError(t, gzipCommand(context.Background(), env))
 	assert.Equal(t, "hello gzip", gunzipString(t, stdout.Bytes()))
 }
 
@@ -46,7 +47,8 @@ func Test_gzip_file(t *testing.T) {
 
 	env, _, _ := NewTestEnv(t, "/work")
 	mustWrite(t, env.FS, "/work/data.txt", "payload")
-	require.NoError(t, gzipCommand(context.Background(), env, []string{"data.txt"}))
+	env.Args = []string{"data.txt"}
+	require.NoError(t, gzipCommand(context.Background(), env))
 
 	// Original is replaced by data.txt.gz.
 	_, err := env.FS.Stat("/work/data.txt")
@@ -61,7 +63,8 @@ func Test_gzip_keep(t *testing.T) {
 
 	env, _, _ := NewTestEnv(t, "/work")
 	mustWrite(t, env.FS, "/work/data.txt", "payload")
-	require.NoError(t, gzipCommand(context.Background(), env, []string{"-k", "data.txt"}))
+	env.Args = []string{"-k", "data.txt"}
+	require.NoError(t, gzipCommand(context.Background(), env))
 
 	assert.Equal(t, "payload", mustRead(t, env.FS, "/work/data.txt"), "original kept with -k")
 	_, err := env.FS.Stat("/work/data.txt.gz")
@@ -73,7 +76,8 @@ func Test_gunzip_file(t *testing.T) {
 
 	env, _, _ := NewTestEnv(t, "/work")
 	require.NoError(t, afero.WriteFile(env.FS, "/work/data.txt.gz", gzipBytes(t, "restored"), 0o644))
-	require.NoError(t, gunzipCommand(context.Background(), env, []string{"data.txt.gz"}))
+	env.Args = []string{"data.txt.gz"}
+	require.NoError(t, gunzipCommand(context.Background(), env))
 
 	assert.Equal(t, "restored", mustRead(t, env.FS, "/work/data.txt"))
 	_, err := env.FS.Stat("/work/data.txt.gz")
@@ -85,7 +89,8 @@ func Test_gunzip_stdin(t *testing.T) {
 
 	env, stdout, _ := NewTestEnv(t, "/work")
 	env.Stdin = bytes.NewReader(gzipBytes(t, "from stdin"))
-	require.NoError(t, gunzipCommand(context.Background(), env, nil))
+	env.Args = nil
+	require.NoError(t, gunzipCommand(context.Background(), env))
 	assert.Equal(t, "from stdin", stdout.String())
 }
 
@@ -94,7 +99,8 @@ func Test_zcat(t *testing.T) {
 
 	env, stdout, _ := NewTestEnv(t, "/work")
 	require.NoError(t, afero.WriteFile(env.FS, "/work/a.gz", gzipBytes(t, "cat me"), 0o644))
-	require.NoError(t, zcatCommand(context.Background(), env, []string{"a.gz"}))
+	env.Args = []string{"a.gz"}
+	require.NoError(t, zcatCommand(context.Background(), env))
 
 	assert.Equal(t, "cat me", stdout.String())
 	// zcat keeps the input.
@@ -107,5 +113,6 @@ func Test_gunzip_badSuffix(t *testing.T) {
 
 	env, _, _ := NewTestEnv(t, "/work")
 	require.NoError(t, afero.WriteFile(env.FS, "/work/data", gzipBytes(t, "x"), 0o644))
-	require.Error(t, gunzipCommand(context.Background(), env, []string{"data"}))
+	env.Args = []string{"data"}
+	require.Error(t, gunzipCommand(context.Background(), env))
 }

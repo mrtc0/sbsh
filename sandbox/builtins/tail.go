@@ -9,8 +9,8 @@ import (
 // treated as its magnitude, so "-n -K" also prints the last K lines. With no
 // arguments it reads stdin. For multiple files it prefixes each with a
 // "==> name <==" header.
-func tail(_ context.Context, env *Env, args []string) error {
-	n, files, err := parseLineCount(args, 10)
+func tail(_ context.Context, env *Env) error {
+	n, files, err := parseLineCount(env.Args, 10)
 	if err != nil {
 		return err
 	}

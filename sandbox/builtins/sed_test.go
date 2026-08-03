@@ -81,7 +81,8 @@ func Test_sed(t *testing.T) {
 			env, stdout, _ := NewTestEnv(t, "/work")
 			env.Stdin = strings.NewReader(tc.stdin)
 
-			require.NoError(t, sedCommand(context.Background(), env, tc.args))
+			env.Args = tc.args
+			require.NoError(t, sedCommand(context.Background(), env))
 			assert.Equal(t, tc.want, stdout.String())
 		})
 	}
@@ -93,7 +94,8 @@ func Test_sed_inPlace(t *testing.T) {
 	env, stdout, _ := NewTestEnv(t, "/work")
 	mustWrite(t, env.FS, "/work/f", "hello world\nhello again\n")
 
-	require.NoError(t, sedCommand(context.Background(), env, []string{"-i", "s/hello/hi/", "f"}))
+	env.Args = []string{"-i", "s/hello/hi/", "f"}
+	require.NoError(t, sedCommand(context.Background(), env))
 
 	assert.Empty(t, stdout.String(), "-i must not write to stdout")
 	assert.Equal(t, "hi world\nhi again\n", mustRead(t, env.FS, "/work/f"))
@@ -105,5 +107,6 @@ func Test_sed_error(t *testing.T) {
 	env, _, _ := NewTestEnv(t, "/work")
 	env.Stdin = strings.NewReader("x\n")
 
-	require.Error(t, sedCommand(context.Background(), env, []string{"s/("}))
+	env.Args = []string{"s/("}
+	require.Error(t, sedCommand(context.Background(), env))
 }
