@@ -66,16 +66,16 @@ func Test_ls(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, stdout, _ := NewTestEnv(t, "/work")
+			inv, stdout, _ := NewTestEnv(t, "/work")
 			for _, dir := range tc.seedDirs {
-				mustMkdir(t, env.FS, dir)
+				mustMkdir(t, inv.FS, dir)
 			}
 			for path, content := range tc.seedFiles {
-				mustWrite(t, env.FS, path, content)
+				mustWrite(t, inv.FS, path, content)
 			}
 
-			env.Args = tc.args
-			err := ls(context.Background(), env)
+			inv.Args = tc.args
+			err := ls(context.Background(), inv)
 			if tc.wantErr {
 				require.Error(t, err)
 				return

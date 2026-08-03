@@ -49,16 +49,16 @@ func Test_wc(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, stdout, _ := NewTestEnv(t, "/work")
+			inv, stdout, _ := NewTestEnv(t, "/work")
 			for path, body := range tc.seed {
-				mustWrite(t, env.FS, path, body)
+				mustWrite(t, inv.FS, path, body)
 			}
 			if tc.stdin != "" {
-				env.Stdin = strings.NewReader(tc.stdin)
+				inv.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			env.Args = tc.args
-			require.NoError(t, wc(context.Background(), env))
+			inv.Args = tc.args
+			require.NoError(t, wc(context.Background(), inv))
 
 			if tc.wantLines > 0 {
 				lines := strings.Split(strings.TrimRight(stdout.String(), "\n"), "\n")

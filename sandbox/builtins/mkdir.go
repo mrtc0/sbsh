@@ -3,13 +3,15 @@ package builtins
 import (
 	"context"
 	"fmt"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // mkdir creates directories. -p creates parent directories too and does not error if they exist.
-func mkdir(_ context.Context, env *Env) error {
+func mkdir(_ context.Context, inv *command.Invocation) error {
 	fs := NewFlagSet()
 	parents := fs.Bool("-p")
-	paths, err := fs.Parse(env.Args)
+	paths, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -17,14 +19,14 @@ func mkdir(_ context.Context, env *Env) error {
 		return fmt.Errorf("usage: mkdir [-p] directory...")
 	}
 	for _, p := range paths {
-		abs := env.Abs(p)
+		abs := inv.Abs(p)
 		if *parents {
-			if err := env.FS.MkdirAll(abs, 0o755); err != nil {
+			if err := inv.FS.MkdirAll(abs, 0o755); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := env.FS.Mkdir(abs, 0o755); err != nil {
+		if err := inv.FS.Mkdir(abs, 0o755); err != nil {
 			return err
 		}
 	}

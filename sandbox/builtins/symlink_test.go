@@ -60,11 +60,11 @@ func seedLinkTree(t *testing.T, hostDir string) {
 func TestFind_DoesNotFollowSymlinks(t *testing.T) {
 	t.Parallel()
 
-	env, hostDir, stdout, stderr := NewTestEnvWithHostMount(t, "find")
+	inv, hostDir, stdout, stderr := NewTestEnvWithHostMount(t, "find")
 	seedLinkTree(t, hostDir)
 
-	env.Args = []string{"/work"}
-	require.NoError(t, find(context.Background(), env))
+	inv.Args = []string{"/work"}
+	require.NoError(t, find(context.Background(), inv))
 
 	got := strings.Fields(stdout.String())
 	assert.ElementsMatch(t, []string{
@@ -89,16 +89,16 @@ func TestFind_DoesNotFollowSymlinks(t *testing.T) {
 func TestRm_DoesNotFollowSymlinks(t *testing.T) {
 	t.Parallel()
 
-	env, hostDir, _, stderr := NewTestEnvWithHostMount(t, "rm")
+	inv, hostDir, _, stderr := NewTestEnvWithHostMount(t, "rm")
 	seedLinkTree(t, hostDir)
 
-	env.Args = []string{"-r", "/work/dirlink"}
-	require.NoError(t, rm(context.Background(), env))
+	inv.Args = []string{"-r", "/work/dirlink"}
+	require.NoError(t, rm(context.Background(), inv))
 	assert.NoFileExists(t, filepath.Join(hostDir, "dirlink"))
 	assert.FileExists(t, filepath.Join(hostDir, "sub/b.txt"), "the link's target must survive")
 
-	env.Args = []string{"-r", "/work/other"}
-	require.NoError(t, rm(context.Background(), env))
+	inv.Args = []string{"-r", "/work/other"}
+	require.NoError(t, rm(context.Background(), inv))
 	assert.NoFileExists(t, filepath.Join(hostDir, "other/c.txt"))
 	assert.FileExists(t, filepath.Join(hostDir, "uplink"), "a link to a removed directory stays")
 
@@ -111,11 +111,11 @@ func TestRm_DoesNotFollowSymlinks(t *testing.T) {
 func TestGrep_DoesNotFollowSymlinks(t *testing.T) {
 	t.Parallel()
 
-	env, hostDir, stdout, stderr := NewTestEnvWithHostMount(t, "grep")
+	inv, hostDir, stdout, stderr := NewTestEnvWithHostMount(t, "grep")
 	seedLinkTree(t, hostDir)
 
-	env.Args = []string{"-r", "match", "/work"}
-	require.NoError(t, grep(context.Background(), env))
+	inv.Args = []string{"-r", "match", "/work"}
+	require.NoError(t, grep(context.Background(), inv))
 
 	got := strings.Fields(stdout.String())
 	assert.ElementsMatch(t, []string{
@@ -132,17 +132,17 @@ func TestGrep_DoesNotFollowSymlinks(t *testing.T) {
 func TestCp_ReportsSymlinkItCannotCopy(t *testing.T) {
 	t.Parallel()
 
-	env, hostDir, _, stderr := NewTestEnvWithHostMount(t, "cp")
+	inv, hostDir, _, stderr := NewTestEnvWithHostMount(t, "cp")
 	seedLinkTree(t, hostDir)
 	ctx := context.Background()
 
-	env.Args = []string{"-r", "/work/other", "/work/dst"}
-	require.NoError(t, cp(ctx, env),
+	inv.Args = []string{"-r", "/work/other", "/work/dst"}
+	require.NoError(t, cp(ctx, inv),
 		"a tree with no link copies cleanly")
 	assert.FileExists(t, filepath.Join(hostDir, "dst/c.txt"))
 
-	env.Args = []string{"-r", "/work/sub", "/work/dst2"}
-	err := cp(ctx, env)
+	inv.Args = []string{"-r", "/work/sub", "/work/dst2"}
+	err := cp(ctx, inv)
 	require.Error(t, err)
 	assert.Equal(t, &command.ExitError{Code: 1}, err)
 	assert.Contains(t, stderr.String(), "cp: /work/sub/blink: symbolic link not copied")
@@ -155,11 +155,11 @@ func TestCp_ReportsSymlinkItCannotCopy(t *testing.T) {
 func TestCp_FollowsSymlinkGivenAsArgument(t *testing.T) {
 	t.Parallel()
 
-	env, hostDir, _, stderr := NewTestEnvWithHostMount(t, "cp")
+	inv, hostDir, _, stderr := NewTestEnvWithHostMount(t, "cp")
 	seedLinkTree(t, hostDir)
 
-	env.Args = []string{"-r", "/work/uplink", "/work/dst"}
-	require.NoError(t, cp(context.Background(), env))
+	inv.Args = []string{"-r", "/work/uplink", "/work/dst"}
+	require.NoError(t, cp(context.Background(), inv))
 	assert.FileExists(t, filepath.Join(hostDir, "dst/c.txt"))
 	assert.Empty(t, stderr.String())
 }
@@ -169,11 +169,11 @@ func TestCp_FollowsSymlinkGivenAsArgument(t *testing.T) {
 func TestCp_RefusesToCopyIntoItself(t *testing.T) {
 	t.Parallel()
 
-	env, hostDir, _, _ := NewTestEnvWithHostMount(t, "cp")
+	inv, hostDir, _, _ := NewTestEnvWithHostMount(t, "cp")
 	seedLinkTree(t, hostDir)
 
-	env.Args = []string{"-r", "/work/sub", "/work/sub/inner"}
-	err := cp(context.Background(), env)
+	inv.Args = []string{"-r", "/work/sub", "/work/sub/inner"}
+	err := cp(context.Background(), inv)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "into itself")
 }
@@ -183,18 +183,18 @@ func TestCp_RefusesToCopyIntoItself(t *testing.T) {
 func TestTar_ReportsSymlinkItCannotStore(t *testing.T) {
 	t.Parallel()
 
-	env, hostDir, stdout, stderr := NewTestEnvWithHostMount(t, "tar")
+	inv, hostDir, stdout, stderr := NewTestEnvWithHostMount(t, "tar")
 	seedLinkTree(t, hostDir)
 
-	env.Args = []string{"-cf", "/work/a.tar", "sub", "dirlink"}
-	err := tarCommand(context.Background(), env)
+	inv.Args = []string{"-cf", "/work/a.tar", "sub", "dirlink"}
+	err := tarCommand(context.Background(), inv)
 	require.Error(t, err)
 	assert.Equal(t, &command.ExitError{Code: 2}, err)
 	assert.Contains(t, stderr.String(), "tar: /work/dirlink: symbolic link not archived")
 	assert.FileExists(t, filepath.Join(hostDir, "a.tar"))
 
 	stdout.Reset()
-	env.Args = []string{"-tf", "/work/a.tar"}
-	require.NoError(t, tarCommand(context.Background(), env))
+	inv.Args = []string{"-tf", "/work/a.tar"}
+	require.NoError(t, tarCommand(context.Background(), inv))
 	assert.ElementsMatch(t, []string{"sub/", "sub/b.txt"}, strings.Fields(stdout.String()))
 }

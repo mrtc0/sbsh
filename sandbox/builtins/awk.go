@@ -10,6 +10,8 @@ import (
 	"github.com/benhoyt/goawk/lexer"
 	"github.com/benhoyt/goawk/parser"
 	"github.com/spf13/afero"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // awkCommand runs an AWK program over the input, backed by goawk (a pure-Go
@@ -22,13 +24,13 @@ import (
 //
 //	awk [-F fs] [-v var=value]... 'program' [file...]
 //	awk [-F fs] [-v var=value]... -f progfile... [file...]
-func awkCommand(ctx context.Context, env *Env) error {
+func awkCommand(ctx context.Context, inv *command.Invocation) error {
 	// awk options must precede the program, so stop scanning at the first operand.
 	fs := NewFlagSet().StopAtFirstOperand()
 	fieldSepFlag := fs.String("", "-F")
 	varFlags := fs.StringList("-v")
 	progFileFlags := fs.StringList("-f")
-	rest, err := fs.Parse(env.Args)
+	rest, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -45,12 +47,12 @@ func awkCommand(ctx context.Context, env *Env) error {
 		vars = append(vars, pair...)
 	}
 
-	src, rest, err := awkProgram(env, progFiles, rest)
+	src, rest, err := awkProgram(inv, progFiles, rest)
 	if err != nil {
 		return err
 	}
 
-	stdin, err := awkInput(env, rest)
+	stdin, err := awkInput(inv, rest)
 	if err != nil {
 		return err
 	}
@@ -68,8 +70,8 @@ func awkCommand(ctx context.Context, env *Env) error {
 
 	config := &goawk.Config{
 		Stdin:  stdin,
-		Output: env.Stdout,
-		Error:  env.Stderr,
+		Output: inv.Stdout,
+		Error:  inv.Stderr,
 		Vars:   setVars,
 		// Fail closed: keep the host unreachable.
 		NoExec:       true,
@@ -95,11 +97,11 @@ func awkCommand(ctx context.Context, env *Env) error {
 // awkProgram resolves the program source. With -f it concatenates the program
 // files from the VFS; otherwise the first positional argument is the program
 // and the remaining positionals are returned as input files.
-func awkProgram(env *Env, progFiles, rest []string) (src string, files []string, err error) {
+func awkProgram(inv *command.Invocation, progFiles, rest []string) (src string, files []string, err error) {
 	if len(progFiles) > 0 {
 		var b strings.Builder
 		for _, pf := range progFiles {
-			data, err := afero.ReadFile(env.FS, env.Abs(pf))
+			data, err := afero.ReadFile(inv.FS, inv.Abs(pf))
 			if err != nil {
 				return "", nil, err
 			}
@@ -117,9 +119,9 @@ func awkProgram(env *Env, progFiles, rest []string) (src string, files []string,
 // awkInput reads the input files from the VFS and concatenates them into a
 // single reader, or reads stdin when no files are named. Files are never handed
 // to goawk directly, since that would bypass the virtual filesystem.
-func awkInput(env *Env, files []string) (*bytes.Reader, error) {
+func awkInput(inv *command.Invocation, files []string) (*bytes.Reader, error) {
 	if len(files) == 0 {
-		b, err := readSource(env, "-")
+		b, err := readSource(inv, "-")
 		if err != nil {
 			return nil, err
 		}
@@ -127,7 +129,7 @@ func awkInput(env *Env, files []string) (*bytes.Reader, error) {
 	}
 	var buf bytes.Buffer
 	for _, f := range files {
-		b, err := afero.ReadFile(env.FS, env.Abs(f))
+		b, err := afero.ReadFile(inv.FS, inv.Abs(f))
 		if err != nil {
 			return nil, err
 		}

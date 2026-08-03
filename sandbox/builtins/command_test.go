@@ -17,28 +17,31 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/mrtc0/sbsh/vfs"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
-func NewTestEnv(t *testing.T, dir string) (*Env, *bytes.Buffer, *bytes.Buffer) {
+func NewTestEnv(t *testing.T, dir string) (*command.Invocation, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 
 	fs := vfs.NewVFS(afero.NewMemMapFs())
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	env := &Env{
+	inv := &command.Invocation{
 		FS:     fs,
 		Dir:    dir,
 		Stdout: stdout,
 		Stderr: stderr,
 		Env:    NewEnviron(expand.ListEnviron()),
 	}
-	return env, stdout, stderr
+	return inv, stdout, stderr
 }
 
-// NewTestEnvWithDeny builds an env whose filesystem enforces deny patterns. The
-// base filesystem is returned as well, since seeding a path the patterns refuse
-// has to bypass the deny layer, exactly as a host directory holding the file does.
-func NewTestEnvWithDeny(t *testing.T, dir, cmd string, patterns ...string) (*Env, afero.Fs, *bytes.Buffer, *bytes.Buffer) {
+// NewTestEnvWithDeny builds an invocation whose filesystem enforces deny
+// patterns. The base filesystem is returned as well, since seeding a path the
+// patterns refuse has to bypass the deny layer, exactly as a host directory
+// holding the file does.
+func NewTestEnvWithDeny(t *testing.T, dir, cmd string, patterns ...string) (*command.Invocation, afero.Fs, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 
 	base := vfs.NewVFS(afero.NewMemMapFs())
@@ -47,7 +50,7 @@ func NewTestEnvWithDeny(t *testing.T, dir, cmd string, patterns ...string) (*Env
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	env := &Env{
+	inv := &command.Invocation{
 		Name:   cmd,
 		FS:     deny,
 		Dir:    dir,
@@ -55,7 +58,7 @@ func NewTestEnvWithDeny(t *testing.T, dir, cmd string, patterns ...string) (*Env
 		Stderr: stderr,
 		Env:    NewEnviron(expand.ListEnviron()),
 	}
-	return env, base, stdout, stderr
+	return inv, base, stdout, stderr
 }
 
 // NewTestEnvWithHostMount mounts a real directory at /work and enforces deny
@@ -63,7 +66,7 @@ func NewTestEnvWithDeny(t *testing.T, dir, cmd string, patterns ...string) (*Env
 // matters here: it removes a non-empty directory in one step, so a test that
 // needs the real ENOTEMPTY has to mount a host directory. The returned path is
 // the host side, which a test seeds directly.
-func NewTestEnvWithHostMount(t *testing.T, cmd string, patterns ...string) (*Env, string, *bytes.Buffer, *bytes.Buffer) {
+func NewTestEnvWithHostMount(t *testing.T, cmd string, patterns ...string) (*command.Invocation, string, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 
 	hostDir := t.TempDir()
@@ -79,7 +82,7 @@ func NewTestEnvWithHostMount(t *testing.T, cmd string, patterns ...string) (*Env
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	env := &Env{
+	inv := &command.Invocation{
 		Name:   cmd,
 		FS:     deny,
 		Dir:    "/work",
@@ -87,61 +90,61 @@ func NewTestEnvWithHostMount(t *testing.T, cmd string, patterns ...string) (*Env
 		Stderr: stderr,
 		Env:    NewEnviron(expand.ListEnviron()),
 	}
-	return env, hostDir, stdout, stderr
+	return inv, hostDir, stdout, stderr
 }
 
 func installTestCommands(t *testing.T) {
 	t.Helper()
 
 	saved := registry
-	replacement := make(map[string]Func, len(saved)+6)
+	replacement := make(map[string]command.RunFunc, len(saved)+6)
 	for k, v := range saved {
 		replacement[k] = v
 	}
 	registry = replacement
 	t.Cleanup(func() { registry = saved })
 
-	replacement["test_echo"] = func(_ context.Context, env *Env) error {
-		fmt.Fprintln(env.Stdout, strings.Join(env.Args, " "))
+	replacement["test_echo"] = func(_ context.Context, inv *command.Invocation) error {
+		fmt.Fprintln(inv.Stdout, strings.Join(inv.Args, " "))
 		return nil
 	}
 
-	replacement["test_fail"] = func(_ context.Context, _ *Env) error {
+	replacement["test_fail"] = func(_ context.Context, _ *command.Invocation) error {
 		return errors.New("boom")
 	}
 
-	replacement["test_exit"] = func(_ context.Context, _ *Env) error {
+	replacement["test_exit"] = func(_ context.Context, _ *command.Invocation) error {
 		return exit(3)
 	}
 
-	replacement["test_exit_big"] = func(_ context.Context, _ *Env) error {
+	replacement["test_exit_big"] = func(_ context.Context, _ *command.Invocation) error {
 		return exit(300)
 	}
 
-	replacement["test_exit_native"] = func(_ context.Context, _ *Env) error {
+	replacement["test_exit_native"] = func(_ context.Context, _ *command.Invocation) error {
 		return interp.ExitStatus(3)
 	}
 
-	replacement["test_dir"] = func(_ context.Context, env *Env) error {
-		fmt.Fprintln(env.Stdout, env.Dir)
+	replacement["test_dir"] = func(_ context.Context, inv *command.Invocation) error {
+		fmt.Fprintln(inv.Stdout, inv.Dir)
 		return nil
 	}
 
-	replacement["test_cat"] = func(_ context.Context, env *Env) error {
-		b, err := afero.ReadFile(env.FS, env.Args[0])
+	replacement["test_cat"] = func(_ context.Context, inv *command.Invocation) error {
+		b, err := afero.ReadFile(inv.FS, inv.Args[0])
 		if err != nil {
 			return err
 		}
-		env.Stdout.Write(b)
+		inv.Stdout.Write(b)
 		return nil
 	}
 
-	replacement["test_net"] = func(_ context.Context, env *Env) error {
-		if env.HTTP == nil {
-			fmt.Fprintln(env.Stdout, "nil")
+	replacement["test_net"] = func(_ context.Context, inv *command.Invocation) error {
+		if inv.HTTP == nil {
+			fmt.Fprintln(inv.Stdout, "nil")
 			return nil
 		}
-		fmt.Fprintln(env.Stdout, "client")
+		fmt.Fprintln(inv.Stdout, "client")
 		return nil
 	}
 }
@@ -289,21 +292,21 @@ func TestShellEnviron(t *testing.T) {
 	// EMPTY is set to the empty string, so Lookup must report ok for it while
 	// reporting !ok for a name that was never set: the two are different to a
 	// command that treats "set at all" as the signal.
-	env := NewEnviron(expand.ListEnviron("NAME=value", "EMPTY="))
+	inv := NewEnviron(expand.ListEnviron("NAME=value", "EMPTY="))
 
-	value, ok := env.Lookup("NAME")
+	value, ok := inv.Lookup("NAME")
 	assert.True(t, ok)
 	assert.Equal(t, "value", value)
 
-	value, ok = env.Lookup("EMPTY")
+	value, ok = inv.Lookup("EMPTY")
 	assert.True(t, ok, "a variable set to the empty string is still set")
 	assert.Equal(t, "", value)
 
-	value, ok = env.Lookup("MISSING")
+	value, ok = inv.Lookup("MISSING")
 	assert.False(t, ok)
 	assert.Equal(t, "", value)
 
-	assert.ElementsMatch(t, []string{"NAME=value", "EMPTY="}, env.All())
+	assert.ElementsMatch(t, []string{"NAME=value", "EMPTY="}, inv.All())
 }
 
 // arrayEnviron reports ARR as an array variable, which has no single value to
@@ -331,10 +334,10 @@ func (a arrayEnviron) Each(fn func(name string, vr expand.Variable) bool) {
 func TestShellEnviron_ExcludesArrays(t *testing.T) {
 	t.Parallel()
 
-	env := NewEnviron(arrayEnviron{expand.ListEnviron()})
+	inv := NewEnviron(arrayEnviron{expand.ListEnviron()})
 
-	assert.Equal(t, []string{"STR=s"}, env.All())
+	assert.Equal(t, []string{"STR=s"}, inv.All())
 
-	_, ok := env.Lookup("ARR")
+	_, ok := inv.Lookup("ARR")
 	assert.False(t, ok, "an array has no single value to return")
 }

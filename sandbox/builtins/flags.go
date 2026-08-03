@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/spf13/afero"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // FlagSet is the one option parser every builtin uses. A command declares its
@@ -253,12 +255,12 @@ func parseLineCount(args []string, def int) (n int, files []string, err error) {
 
 // readSource returns the file contents at path. When path is "" or "-" it reads from
 // stdin (empty if Stdin is nil).
-func readSource(env *Env, path string) ([]byte, error) {
+func readSource(inv *command.Invocation, path string) ([]byte, error) {
 	if path == "" || path == "-" {
-		if env.Stdin == nil {
+		if inv.Stdin == nil {
 			return nil, nil
 		}
-		return io.ReadAll(env.Stdin)
+		return io.ReadAll(inv.Stdin)
 	}
-	return afero.ReadFile(env.FS, env.Abs(path))
+	return afero.ReadFile(inv.FS, inv.Abs(path))
 }

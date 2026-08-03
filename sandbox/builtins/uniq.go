@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // uniqCommand filters adjacent duplicate lines. Like the real uniq it only
@@ -12,13 +14,13 @@ import (
 //
 //	-c prefix counts / -d only duplicated lines / -u only unique lines / -i ignore case
 //	uniq [-cdui] [file]
-func uniqCommand(_ context.Context, env *Env) error {
+func uniqCommand(_ context.Context, inv *command.Invocation) error {
 	fs := NewFlagSet()
 	count := fs.Bool("-c")
 	onlyDup := fs.Bool("-d")
 	onlyUniq := fs.Bool("-u")
 	fold := fs.Bool("-i")
-	files, err := fs.Parse(env.Args)
+	files, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -30,7 +32,7 @@ func uniqCommand(_ context.Context, env *Env) error {
 	if len(files) == 1 {
 		src = files[0]
 	}
-	b, err := readSource(env, src)
+	b, err := readSource(inv, src)
 	if err != nil {
 		return err
 	}
@@ -53,9 +55,9 @@ func uniqCommand(_ context.Context, env *Env) error {
 		case *onlyDup && n < 2:
 		case *onlyUniq && n > 1:
 		case *count:
-			fmt.Fprintf(env.Stdout, "%7d %s\n", n, lines[i])
+			fmt.Fprintf(inv.Stdout, "%7d %s\n", n, lines[i])
 		default:
-			fmt.Fprintln(env.Stdout, lines[i])
+			fmt.Fprintln(inv.Stdout, lines[i])
 		}
 		i = j
 	}

@@ -75,16 +75,16 @@ func Test_jq(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, stdout, _ := NewTestEnv(t, "/work")
+			inv, stdout, _ := NewTestEnv(t, "/work")
 			for path, body := range tc.seed {
-				mustWrite(t, env.FS, path, body)
+				mustWrite(t, inv.FS, path, body)
 			}
 			if tc.seed == nil {
-				env.Stdin = strings.NewReader(tc.stdin)
+				inv.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			env.Args = tc.args
-			require.NoError(t, jqCommand(context.Background(), env))
+			inv.Args = tc.args
+			require.NoError(t, jqCommand(context.Background(), inv))
 			assert.Equal(t, tc.want, stdout.String())
 		})
 	}
@@ -125,11 +125,11 @@ func Test_jq_exitStatus(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, _, _ := NewTestEnv(t, "/work")
-			env.Stdin = strings.NewReader(tc.stdin)
+			inv, _, _ := NewTestEnv(t, "/work")
+			inv.Stdin = strings.NewReader(tc.stdin)
 
-			env.Args = tc.args
-			err := jqCommand(context.Background(), env)
+			inv.Args = tc.args
+			err := jqCommand(context.Background(), inv)
 			if tc.ok {
 				require.NoError(t, err)
 				return
@@ -146,16 +146,16 @@ func Test_jq_errors(t *testing.T) {
 
 	t.Run("no filter", func(t *testing.T) {
 		t.Parallel()
-		env, _, _ := NewTestEnv(t, "/work")
-		env.Args = nil
-		require.Error(t, jqCommand(context.Background(), env))
+		inv, _, _ := NewTestEnv(t, "/work")
+		inv.Args = nil
+		require.Error(t, jqCommand(context.Background(), inv))
 	})
 
 	t.Run("invalid filter", func(t *testing.T) {
 		t.Parallel()
-		env, _, _ := NewTestEnv(t, "/work")
-		env.Stdin = strings.NewReader(`{}`)
-		env.Args = []string{".["}
-		require.Error(t, jqCommand(context.Background(), env))
+		inv, _, _ := NewTestEnv(t, "/work")
+		inv.Stdin = strings.NewReader(`{}`)
+		inv.Args = []string{".["}
+		require.Error(t, jqCommand(context.Background(), inv))
 	})
 }

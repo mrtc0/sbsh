@@ -8,30 +8,32 @@ import (
 	"strings"
 
 	"github.com/spf13/afero"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // find walks the given paths recursively and prints paths matching the conditions.
 //
 //	-name PATTERN  base name matches the glob / -type f|d  filter by file kind
 //	find [path...] [-name pattern] [-type f|d]
-func find(_ context.Context, env *Env) error {
+func find(_ context.Context, inv *command.Invocation) error {
 	var roots []string
 	var namePat, typ string
-	for i := 0; i < len(env.Args); i++ {
-		a := env.Args[i]
+	for i := 0; i < len(inv.Args); i++ {
+		a := inv.Args[i]
 		switch a {
 		case "-name":
 			i++
-			if i >= len(env.Args) {
+			if i >= len(inv.Args) {
 				return fmt.Errorf("-name requires an argument")
 			}
-			namePat = env.Args[i]
+			namePat = inv.Args[i]
 		case "-type":
 			i++
-			if i >= len(env.Args) {
+			if i >= len(inv.Args) {
 				return fmt.Errorf("-type requires an argument")
 			}
-			typ = env.Args[i]
+			typ = inv.Args[i]
 			if typ != "f" && typ != "d" {
 				return fmt.Errorf("invalid -type %q (want f or d)", typ)
 			}
@@ -46,10 +48,10 @@ func find(_ context.Context, env *Env) error {
 		roots = []string{"."}
 	}
 
-	guard := &walkGuard{env: env}
+	guard := &walkGuard{inv: inv}
 	for _, root := range roots {
-		abs := env.Abs(root)
-		err := afero.Walk(env.FS, abs, guard.wrap(func(p string, info os.FileInfo, _ error) error {
+		abs := inv.Abs(root)
+		err := afero.Walk(inv.FS, abs, guard.wrap(func(p string, info os.FileInfo, _ error) error {
 			if typ == "f" && info.IsDir() {
 				return nil
 			}
@@ -65,7 +67,7 @@ func find(_ context.Context, env *Env) error {
 					return nil
 				}
 			}
-			fmt.Fprintln(env.Stdout, walkedName(root, abs, p))
+			fmt.Fprintln(inv.Stdout, walkedName(root, abs, p))
 			return nil
 		}))
 		if err != nil {

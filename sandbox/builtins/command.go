@@ -14,23 +14,11 @@ import (
 	"github.com/mrtc0/sbsh/vfs"
 )
 
-// Env is what a command implementation is given for one call. It is
-// [command.Invocation]: a builtin and a command a host registers from Go are
-// the same kind of thing, so there is one payload to build and one signature to
-// implement. The alias keeps the name the builtins have always used.
-type Env = command.Invocation
-
-// Environ is read access to the shell's variables.
-type Environ = command.Environ
-
-// Func is the type of a command implementation.
-type Func = command.RunFunc
-
-// shellEnviron adapts the shell's environment to Environ.
+// shellEnviron adapts the shell's environment to [command.Environ].
 type shellEnviron struct{ env expand.Environ }
 
-// NewEnviron returns an Environ backed by the shell's variables.
-func NewEnviron(env expand.Environ) Environ { return shellEnviron{env} }
+// NewEnviron returns a [command.Environ] backed by the shell's variables.
+func NewEnviron(env expand.Environ) command.Environ { return shellEnviron{env} }
 
 func (s shellEnviron) Lookup(name string) (string, bool) {
 	vr := s.env.Get(name)
@@ -61,9 +49,9 @@ type Options struct {
 	Python python.Interpreter
 }
 
-var registry = map[string]Func{}
+var registry = map[string]command.RunFunc{}
 
-func Register(name string, fn Func) { registry[name] = fn }
+func Register(name string, fn command.RunFunc) { registry[name] = fn }
 
 // ExecMiddleware returns an interp.ExecHandlerFunc that looks up the command in the registry and executes it.
 func ExecMiddleware(fsys vfs.FS, opts Options) func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
@@ -82,7 +70,7 @@ func ExecMiddleware(fsys vfs.FS, opts Options) func(next interp.ExecHandlerFunc)
 
 			// The one place the shell's handler context is unpacked: the payload a
 			// command receives carries no type from the shell backend.
-			env := &Env{
+			inv := &command.Invocation{
 				Name:   args[0],
 				Args:   args[1:],
 				Dir:    hc.Dir,
@@ -94,7 +82,7 @@ func ExecMiddleware(fsys vfs.FS, opts Options) func(next interp.ExecHandlerFunc)
 				Python: opts.Python,
 				Env:    NewEnviron(hc.Env),
 			}
-			if err := fn(ctx, env); err != nil {
+			if err := fn(ctx, inv); err != nil {
 				// The single seam between a builtin's int exit code and the
 				// shell backend's representation. interp.ExitStatus is a uint8,
 				// so the code is reduced modulo 256 here — matching how the OS

@@ -9,6 +9,8 @@ import (
 	"io"
 
 	"github.com/itchyny/gojq"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // jqCommand filters JSON with a gojq (pure-Go jq) program. With no files it
@@ -17,14 +19,14 @@ import (
 //	-c compact output / -r raw string output / -n null input
 //	-s slurp all inputs into a single array / -e set exit status from the last output
 //	jq [-cnrse] filter [file...]
-func jqCommand(ctx context.Context, env *Env) error {
+func jqCommand(ctx context.Context, inv *command.Invocation) error {
 	fs := NewFlagSet()
 	compactFlag := fs.Bool("-c", "--compact-output")
 	rawFlag := fs.Bool("-r", "--raw-output")
 	nullInputFlag := fs.Bool("-n", "--null-input")
 	slurpFlag := fs.Bool("-s", "--slurp")
 	exitStatusFlag := fs.Bool("-e", "--exit-status")
-	rest, err := fs.Parse(env.Args)
+	rest, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -45,7 +47,7 @@ func jqCommand(ctx context.Context, env *Env) error {
 		return fmt.Errorf("compile error: %w", err)
 	}
 
-	inputs, err := jqInputs(env, files, nullInput, slurp)
+	inputs, err := jqInputs(inv, files, nullInput, slurp)
 	if err != nil {
 		return err
 	}
@@ -74,7 +76,7 @@ func jqCommand(ctx context.Context, env *Env) error {
 			}
 			produced = true
 			lastOutput = v
-			if err := jqWrite(env.Stdout, v, compact, raw); err != nil {
+			if err := jqWrite(inv.Stdout, v, compact, raw); err != nil {
 				return err
 			}
 		}
@@ -94,21 +96,21 @@ func jqCommand(ctx context.Context, env *Env) error {
 // jqInputs collects the decoded JSON values the filter runs over. With
 // nullInput it is a single nil; otherwise the input stream is decoded into one
 // value per top-level JSON document, or a single array when slurping.
-func jqInputs(env *Env, files []string, nullInput, slurp bool) ([]any, error) {
+func jqInputs(inv *command.Invocation, files []string, nullInput, slurp bool) ([]any, error) {
 	if nullInput {
 		return []any{nil}, nil
 	}
 
 	var raw []byte
 	if len(files) == 0 {
-		b, err := readSource(env, "-")
+		b, err := readSource(inv, "-")
 		if err != nil {
 			return nil, err
 		}
 		raw = b
 	} else {
 		for _, f := range files {
-			b, err := readSource(env, f)
+			b, err := readSource(inv, f)
 			if err != nil {
 				return nil, err
 			}

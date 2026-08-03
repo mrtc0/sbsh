@@ -18,53 +18,53 @@ func Test_cp(t *testing.T) {
 
 	cases := map[string]struct {
 		args    []string
-		setup   func(t *testing.T, env *Env)
+		setup   func(t *testing.T, inv *command.Invocation)
 		wantErr bool
-		check   func(t *testing.T, env *Env)
+		check   func(t *testing.T, inv *command.Invocation)
 	}{
 		"copies a file to a new path": {
 			args: []string{"src", "dst"},
-			setup: func(t *testing.T, env *Env) {
-				mustWrite(t, env.FS, "/work/src", "data")
+			setup: func(t *testing.T, inv *command.Invocation) {
+				mustWrite(t, inv.FS, "/work/src", "data")
 			},
-			check: func(t *testing.T, env *Env) {
-				assert.Equal(t, "data", mustRead(t, env.FS, "/work/dst"))
-				assert.Equal(t, "data", mustRead(t, env.FS, "/work/src"), "src should still exist")
+			check: func(t *testing.T, inv *command.Invocation) {
+				assert.Equal(t, "data", mustRead(t, inv.FS, "/work/dst"))
+				assert.Equal(t, "data", mustRead(t, inv.FS, "/work/src"), "src should still exist")
 			},
 		},
 		"copies into an existing directory using the base name": {
 			args: []string{"src", "out"},
-			setup: func(t *testing.T, env *Env) {
-				mustWrite(t, env.FS, "/work/src", "x")
-				mustMkdir(t, env.FS, "/work/out")
+			setup: func(t *testing.T, inv *command.Invocation) {
+				mustWrite(t, inv.FS, "/work/src", "x")
+				mustMkdir(t, inv.FS, "/work/out")
 			},
-			check: func(t *testing.T, env *Env) {
-				assert.Equal(t, "x", mustRead(t, env.FS, "/work/out/src"))
+			check: func(t *testing.T, inv *command.Invocation) {
+				assert.Equal(t, "x", mustRead(t, inv.FS, "/work/out/src"))
 			},
 		},
 		"refuses to copy a directory without -r": {
 			args: []string{"dir", "copy"},
-			setup: func(t *testing.T, env *Env) {
-				mustMkdir(t, env.FS, "/work/dir")
+			setup: func(t *testing.T, inv *command.Invocation) {
+				mustMkdir(t, inv.FS, "/work/dir")
 			},
 			wantErr: true,
 		},
 		"-r copies a directory tree": {
 			args: []string{"-r", "dir", "copy"},
-			setup: func(t *testing.T, env *Env) {
-				mustWrite(t, env.FS, "/work/dir/a", "1")
-				mustWrite(t, env.FS, "/work/dir/sub/b", "2")
+			setup: func(t *testing.T, inv *command.Invocation) {
+				mustWrite(t, inv.FS, "/work/dir/a", "1")
+				mustWrite(t, inv.FS, "/work/dir/sub/b", "2")
 			},
-			check: func(t *testing.T, env *Env) {
-				assert.Equal(t, "1", mustRead(t, env.FS, "/work/copy/a"))
-				assert.Equal(t, "2", mustRead(t, env.FS, "/work/copy/sub/b"))
+			check: func(t *testing.T, inv *command.Invocation) {
+				assert.Equal(t, "1", mustRead(t, inv.FS, "/work/copy/a"))
+				assert.Equal(t, "2", mustRead(t, inv.FS, "/work/copy/sub/b"))
 			},
 		},
 		"errors when copying multiple sources to a non-directory": {
 			args: []string{"a", "b", "dst"},
-			setup: func(t *testing.T, env *Env) {
-				mustWrite(t, env.FS, "/work/a", "")
-				mustWrite(t, env.FS, "/work/b", "")
+			setup: func(t *testing.T, inv *command.Invocation) {
+				mustWrite(t, inv.FS, "/work/a", "")
+				mustWrite(t, inv.FS, "/work/b", "")
 			},
 			wantErr: true,
 		},
@@ -74,13 +74,13 @@ func Test_cp(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, _, _ := NewTestEnv(t, "/work")
+			inv, _, _ := NewTestEnv(t, "/work")
 			if tc.setup != nil {
-				tc.setup(t, env)
+				tc.setup(t, inv)
 			}
 
-			env.Args = tc.args
-			err := cp(context.Background(), env)
+			inv.Args = tc.args
+			err := cp(context.Background(), inv)
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -88,7 +88,7 @@ func Test_cp(t *testing.T) {
 			require.NoError(t, err)
 
 			if tc.check != nil {
-				tc.check(t, env)
+				tc.check(t, inv)
 			}
 		})
 	}
@@ -108,13 +108,13 @@ func mustRead(t *testing.T, fs afero.Fs, path string) string {
 func Test_cp_recursiveOnAHostMount(t *testing.T) {
 	t.Parallel()
 
-	env, hostDir, _, _ := NewTestEnvWithHostMount(t, "cp")
+	inv, hostDir, _, _ := NewTestEnvWithHostMount(t, "cp")
 	require.NoError(t, os.MkdirAll(filepath.Join(hostDir, "src/sub"), 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(hostDir, "src/a.txt"), []byte("1"), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(hostDir, "src/sub/b.txt"), []byte("2"), 0644))
 
-	env.Args = []string{"-r", "/work/src", "/work/dst"}
-	require.NoError(t, cp(context.Background(), env))
+	inv.Args = []string{"-r", "/work/src", "/work/dst"}
+	require.NoError(t, cp(context.Background(), inv))
 
 	got, err := os.ReadFile(filepath.Join(hostDir, "dst/a.txt"))
 	require.NoError(t, err)
@@ -129,13 +129,13 @@ func Test_cp_recursiveOnAHostMount(t *testing.T) {
 func Test_cp_recursiveContinuesPastDeniedEntries(t *testing.T) {
 	t.Parallel()
 
-	env, base, _, stderr := NewTestEnvWithDeny(t, "/work", "cp", "**/.env")
+	inv, base, _, stderr := NewTestEnvWithDeny(t, "/work", "cp", "**/.env")
 	mustWrite(t, base, "/work/src/.env", "SECRET")
 	mustWrite(t, base, "/work/src/a.txt", "1")
 	mustWrite(t, base, "/work/src/sub/b.txt", "2")
 
-	env.Args = []string{"-r", "/work/src", "/work/dst"}
-	err := cp(context.Background(), env)
+	inv.Args = []string{"-r", "/work/src", "/work/dst"}
+	err := cp(context.Background(), inv)
 
 	var ee *command.ExitError
 	require.ErrorAs(t, err, &ee)

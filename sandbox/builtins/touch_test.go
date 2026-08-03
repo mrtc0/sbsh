@@ -7,44 +7,46 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 func Test_touch(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]struct {
-		setup   func(t *testing.T, env *Env)
+		setup   func(t *testing.T, inv *command.Invocation)
 		args    []string
 		wantErr bool
-		check   func(t *testing.T, env *Env)
+		check   func(t *testing.T, inv *command.Invocation)
 	}{
 		"creates an empty file": {
 			args: []string{"f"},
-			check: func(t *testing.T, env *Env) {
-				info, err := env.FS.Stat("/work/f")
+			check: func(t *testing.T, inv *command.Invocation) {
+				info, err := inv.FS.Stat("/work/f")
 				require.NoError(t, err)
 				assert.Equal(t, int64(0), info.Size(), "size")
 			},
 		},
 		"does not truncate an existing file": {
-			setup: func(t *testing.T, env *Env) {
-				mustWrite(t, env.FS, "/work/f", "keep")
+			setup: func(t *testing.T, inv *command.Invocation) {
+				mustWrite(t, inv.FS, "/work/f", "keep")
 			},
 			args: []string{"f"},
-			check: func(t *testing.T, env *Env) {
-				assert.Equal(t, "keep", mustRead(t, env.FS, "/work/f"), "content")
+			check: func(t *testing.T, inv *command.Invocation) {
+				assert.Equal(t, "keep", mustRead(t, inv.FS, "/work/f"), "content")
 			},
 		},
 		"updates the modification time of an existing file": {
-			setup: func(t *testing.T, env *Env) {
-				mustWrite(t, env.FS, "/work/f", "x")
+			setup: func(t *testing.T, inv *command.Invocation) {
+				mustWrite(t, inv.FS, "/work/f", "x")
 				old := time.Now().Add(-time.Hour)
-				require.NoError(t, env.FS.Chtimes("/work/f", old, old))
+				require.NoError(t, inv.FS.Chtimes("/work/f", old, old))
 			},
 			args: []string{"f"},
-			check: func(t *testing.T, env *Env) {
+			check: func(t *testing.T, inv *command.Invocation) {
 				old := time.Now().Add(-time.Hour)
-				info, err := env.FS.Stat("/work/f")
+				info, err := inv.FS.Stat("/work/f")
 				require.NoError(t, err)
 				assert.True(t, info.ModTime().After(old), "mtime = %v, want after %v", info.ModTime(), old)
 			},
@@ -59,13 +61,13 @@ func Test_touch(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, _, _ := NewTestEnv(t, "/work")
+			inv, _, _ := NewTestEnv(t, "/work")
 			if tc.setup != nil {
-				tc.setup(t, env)
+				tc.setup(t, inv)
 			}
 
-			env.Args = tc.args
-			err := touch(context.Background(), env)
+			inv.Args = tc.args
+			err := touch(context.Background(), inv)
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -73,7 +75,7 @@ func Test_touch(t *testing.T) {
 			require.NoError(t, err)
 
 			if tc.check != nil {
-				tc.check(t, env)
+				tc.check(t, inv)
 			}
 		})
 	}

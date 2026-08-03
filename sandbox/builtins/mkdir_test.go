@@ -7,41 +7,43 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 func Test_mkdir(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]struct {
-		setup   func(t *testing.T, env *Env)
+		setup   func(t *testing.T, inv *command.Invocation)
 		args    []string
 		wantErr bool
-		check   func(t *testing.T, env *Env)
+		check   func(t *testing.T, inv *command.Invocation)
 	}{
 		"creates a directory": {
 			args: []string{"d"},
-			check: func(t *testing.T, env *Env) {
-				ok, _ := afero.DirExists(env.FS, "/work/d")
+			check: func(t *testing.T, inv *command.Invocation) {
+				ok, _ := afero.DirExists(inv.FS, "/work/d")
 				assert.True(t, ok, "expected /work/d to be a directory")
 			},
 		},
 		"without -p fails on an existing directory": {
-			setup: func(t *testing.T, env *Env) {
-				mustMkdir(t, env.FS, "/work/d")
+			setup: func(t *testing.T, inv *command.Invocation) {
+				mustMkdir(t, inv.FS, "/work/d")
 			},
 			args:    []string{"d"},
 			wantErr: true,
 		},
 		"-p is idempotent on an existing directory": {
-			setup: func(t *testing.T, env *Env) {
-				mustMkdir(t, env.FS, "/work/d")
+			setup: func(t *testing.T, inv *command.Invocation) {
+				mustMkdir(t, inv.FS, "/work/d")
 			},
 			args: []string{"-p", "d"},
 		},
 		"-p creates parents": {
 			args: []string{"-p", "a/b/c"},
-			check: func(t *testing.T, env *Env) {
-				ok, _ := afero.DirExists(env.FS, "/work/a/b/c")
+			check: func(t *testing.T, inv *command.Invocation) {
+				ok, _ := afero.DirExists(inv.FS, "/work/a/b/c")
 				assert.True(t, ok, "expected /work/a/b/c to exist")
 			},
 		},
@@ -55,13 +57,13 @@ func Test_mkdir(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, _, _ := NewTestEnv(t, "/work")
+			inv, _, _ := NewTestEnv(t, "/work")
 			if tc.setup != nil {
-				tc.setup(t, env)
+				tc.setup(t, inv)
 			}
 
-			env.Args = tc.args
-			err := mkdir(context.Background(), env)
+			inv.Args = tc.args
+			err := mkdir(context.Background(), inv)
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -69,7 +71,7 @@ func Test_mkdir(t *testing.T) {
 			require.NoError(t, err)
 
 			if tc.check != nil {
-				tc.check(t, env)
+				tc.check(t, inv)
 			}
 		})
 	}

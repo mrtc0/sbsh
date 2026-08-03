@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"path"
 	"syscall"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // mv moves (renames) files and directories.
 //
 //	mv source dest
 //	mv source... directory
-func mv(_ context.Context, env *Env) error {
-	rest, err := NewFlagSet().Parse(env.Args)
+func mv(_ context.Context, inv *command.Invocation) error {
+	rest, err := NewFlagSet().Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -23,20 +25,20 @@ func mv(_ context.Context, env *Env) error {
 	dst := rest[len(rest)-1]
 	srcs := rest[:len(rest)-1]
 
-	dstAbs := env.Abs(dst)
-	info, err := env.FS.Stat(dstAbs)
+	dstAbs := inv.Abs(dst)
+	info, err := inv.FS.Stat(dstAbs)
 	dstIsDir := err == nil && info.IsDir()
 	if len(srcs) > 1 && !dstIsDir {
 		return fmt.Errorf("target %q is not a directory", dst)
 	}
 
 	for _, s := range srcs {
-		srcAbs := env.Abs(s)
+		srcAbs := inv.Abs(s)
 		target := dstAbs
 		if dstIsDir {
 			target = path.Join(dstAbs, path.Base(srcAbs))
 		}
-		if err := env.FS.Rename(srcAbs, target); err != nil {
+		if err := inv.FS.Rename(srcAbs, target); err != nil {
 			// A rename across mounts fails with EXDEV (they act as separate filesystems).
 			// The raw "invalid cross-device link" is unclear, so reword the cause.
 			if errors.Is(err, syscall.EXDEV) {

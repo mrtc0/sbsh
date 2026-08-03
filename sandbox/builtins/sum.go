@@ -7,13 +7,15 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"hash"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // hashFiles computes a checksum over each input using newHash and prints it in
 // the GNU coreutils format "<hex>  <name>". With no files it reads stdin and
 // reports the name "-".
-func hashFiles(env *Env, newHash func() hash.Hash) error {
-	files, err := NewFlagSet().Parse(env.Args)
+func hashFiles(inv *command.Invocation, newHash func() hash.Hash) error {
+	files, err := NewFlagSet().Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -21,7 +23,7 @@ func hashFiles(env *Env, newHash func() hash.Hash) error {
 		files = []string{"-"}
 	}
 	for _, f := range files {
-		b, err := readSource(env, f)
+		b, err := readSource(inv, f)
 		if err != nil {
 			return err
 		}
@@ -31,21 +33,21 @@ func hashFiles(env *Env, newHash func() hash.Hash) error {
 		if name == "" {
 			name = "-"
 		}
-		fmt.Fprintf(env.Stdout, "%x  %s\n", h.Sum(nil), name)
+		fmt.Fprintf(inv.Stdout, "%x  %s\n", h.Sum(nil), name)
 	}
 	return nil
 }
 
-func md5sum(_ context.Context, env *Env) error {
-	return hashFiles(env, func() hash.Hash { return md5.New() })
+func md5sum(_ context.Context, inv *command.Invocation) error {
+	return hashFiles(inv, func() hash.Hash { return md5.New() })
 }
 
-func sha1sum(_ context.Context, env *Env) error {
-	return hashFiles(env, func() hash.Hash { return sha1.New() })
+func sha1sum(_ context.Context, inv *command.Invocation) error {
+	return hashFiles(inv, func() hash.Hash { return sha1.New() })
 }
 
-func sha256sum(_ context.Context, env *Env) error {
-	return hashFiles(env, func() hash.Hash { return sha256.New() })
+func sha256sum(_ context.Context, inv *command.Invocation) error {
+	return hashFiles(inv, func() hash.Hash { return sha256.New() })
 }
 
 func init() {

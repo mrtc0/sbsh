@@ -90,16 +90,16 @@ func Test_cut(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, stdout, _ := NewTestEnv(t, "/work")
+			inv, stdout, _ := NewTestEnv(t, "/work")
 			for path, body := range tc.seed {
-				mustWrite(t, env.FS, path, body)
+				mustWrite(t, inv.FS, path, body)
 			}
 			if tc.seed == nil {
-				env.Stdin = strings.NewReader(tc.stdin)
+				inv.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			env.Args = tc.args
-			err := cut(context.Background(), env)
+			inv.Args = tc.args
+			err := cut(context.Background(), inv)
 			if tc.wantErr {
 				require.Error(t, err)
 				return

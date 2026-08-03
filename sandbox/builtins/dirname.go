@@ -4,22 +4,24 @@ import (
 	"context"
 	"fmt"
 	"path"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // dirname prints the directory portion of each path argument, one per line.
 //
 //	dirname path...
-func dirname(_ context.Context, env *Env) error {
-	if len(env.Args) == 0 {
+func dirname(_ context.Context, inv *command.Invocation) error {
+	if len(inv.Args) == 0 {
 		return fmt.Errorf("usage: dirname path...")
 	}
-	for _, p := range env.Args {
+	for _, p := range inv.Args {
 		trimmed := stripTrailingSlashes(p)
 		if trimmed == "" {
-			fmt.Fprintln(env.Stdout, "/")
+			fmt.Fprintln(inv.Stdout, "/")
 			continue
 		}
-		fmt.Fprintln(env.Stdout, path.Dir(trimmed))
+		fmt.Fprintln(inv.Stdout, path.Dir(trimmed))
 	}
 	return nil
 }

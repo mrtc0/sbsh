@@ -60,14 +60,14 @@ func Test_walkGuard(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, base, _, stderr := NewTestEnvWithDeny(t, "/work", "walktest", "**/.env")
+			inv, base, _, stderr := NewTestEnvWithDeny(t, "/work", "walktest", "**/.env")
 			for _, p := range []string{"/work/.env", "/work/a.txt", "/work/b.txt"} {
 				mustWrite(t, base, p, "x")
 			}
 
 			var visited []string
-			guard := &walkGuard{env: env}
-			err := afero.Walk(env.FS, "/work", guard.wrap(func(p string, info os.FileInfo, _ error) error {
+			guard := &walkGuard{inv: inv}
+			err := afero.Walk(inv.FS, "/work", guard.wrap(func(p string, info os.FileInfo, _ error) error {
 				if info.IsDir() {
 					return nil
 				}

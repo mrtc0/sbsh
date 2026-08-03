@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // seq prints a sequence of numbers. The step defaults to 1 and may be negative.
@@ -13,11 +15,11 @@ import (
 //	seq FIRST LAST
 //	seq FIRST STEP LAST
 //	-s STRING separator between numbers (default newline) / -w pad with leading zeros
-func seq(_ context.Context, env *Env) error {
+func seq(_ context.Context, inv *command.Invocation) error {
 	fs := NewFlagSet().AllowNegativeOperands()
 	sepFlag := fs.String("\n", "-s", "--separator")
 	equalWidthFlag := fs.Bool("-w", "--equal-width")
-	nums, err := fs.Parse(env.Args)
+	nums, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -83,12 +85,12 @@ func seq(_ context.Context, env *Env) error {
 			s = padZero(s, width)
 		}
 		if i > 0 {
-			fmt.Fprint(env.Stdout, sep)
+			fmt.Fprint(inv.Stdout, sep)
 		}
-		fmt.Fprint(env.Stdout, s)
+		fmt.Fprint(inv.Stdout, s)
 	}
 	if len(formatted) > 0 {
-		fmt.Fprintln(env.Stdout)
+		fmt.Fprintln(inv.Stdout)
 	}
 	return nil
 }
