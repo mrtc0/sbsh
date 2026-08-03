@@ -35,25 +35,25 @@ func gunzipString(t *testing.T, b []byte) string {
 func Test_gzip_stdinToStdout(t *testing.T) {
 	t.Parallel()
 
-	env, stdout, _ := NewTestEnv(t, "/work")
-	env.Stdin = strings.NewReader("hello gzip")
-	env.Args = nil
-	require.NoError(t, gzipCommand(context.Background(), env))
+	inv, stdout, _ := NewTestEnv(t, "/work")
+	inv.Stdin = strings.NewReader("hello gzip")
+	inv.Args = nil
+	require.NoError(t, gzipCommand(context.Background(), inv))
 	assert.Equal(t, "hello gzip", gunzipString(t, stdout.Bytes()))
 }
 
 func Test_gzip_file(t *testing.T) {
 	t.Parallel()
 
-	env, _, _ := NewTestEnv(t, "/work")
-	mustWrite(t, env.FS, "/work/data.txt", "payload")
-	env.Args = []string{"data.txt"}
-	require.NoError(t, gzipCommand(context.Background(), env))
+	inv, _, _ := NewTestEnv(t, "/work")
+	mustWrite(t, inv.FS, "/work/data.txt", "payload")
+	inv.Args = []string{"data.txt"}
+	require.NoError(t, gzipCommand(context.Background(), inv))
 
 	// Original is replaced by data.txt.gz.
-	_, err := env.FS.Stat("/work/data.txt")
+	_, err := inv.FS.Stat("/work/data.txt")
 	assert.Error(t, err, "original should be removed")
-	b, err := afero.ReadFile(env.FS, "/work/data.txt.gz")
+	b, err := afero.ReadFile(inv.FS, "/work/data.txt.gz")
 	require.NoError(t, err)
 	assert.Equal(t, "payload", gunzipString(t, b))
 }
@@ -61,58 +61,58 @@ func Test_gzip_file(t *testing.T) {
 func Test_gzip_keep(t *testing.T) {
 	t.Parallel()
 
-	env, _, _ := NewTestEnv(t, "/work")
-	mustWrite(t, env.FS, "/work/data.txt", "payload")
-	env.Args = []string{"-k", "data.txt"}
-	require.NoError(t, gzipCommand(context.Background(), env))
+	inv, _, _ := NewTestEnv(t, "/work")
+	mustWrite(t, inv.FS, "/work/data.txt", "payload")
+	inv.Args = []string{"-k", "data.txt"}
+	require.NoError(t, gzipCommand(context.Background(), inv))
 
-	assert.Equal(t, "payload", mustRead(t, env.FS, "/work/data.txt"), "original kept with -k")
-	_, err := env.FS.Stat("/work/data.txt.gz")
+	assert.Equal(t, "payload", mustRead(t, inv.FS, "/work/data.txt"), "original kept with -k")
+	_, err := inv.FS.Stat("/work/data.txt.gz")
 	require.NoError(t, err)
 }
 
 func Test_gunzip_file(t *testing.T) {
 	t.Parallel()
 
-	env, _, _ := NewTestEnv(t, "/work")
-	require.NoError(t, afero.WriteFile(env.FS, "/work/data.txt.gz", gzipBytes(t, "restored"), 0o644))
-	env.Args = []string{"data.txt.gz"}
-	require.NoError(t, gunzipCommand(context.Background(), env))
+	inv, _, _ := NewTestEnv(t, "/work")
+	require.NoError(t, afero.WriteFile(inv.FS, "/work/data.txt.gz", gzipBytes(t, "restored"), 0o644))
+	inv.Args = []string{"data.txt.gz"}
+	require.NoError(t, gunzipCommand(context.Background(), inv))
 
-	assert.Equal(t, "restored", mustRead(t, env.FS, "/work/data.txt"))
-	_, err := env.FS.Stat("/work/data.txt.gz")
+	assert.Equal(t, "restored", mustRead(t, inv.FS, "/work/data.txt"))
+	_, err := inv.FS.Stat("/work/data.txt.gz")
 	assert.Error(t, err, "archive removed after decompression")
 }
 
 func Test_gunzip_stdin(t *testing.T) {
 	t.Parallel()
 
-	env, stdout, _ := NewTestEnv(t, "/work")
-	env.Stdin = bytes.NewReader(gzipBytes(t, "from stdin"))
-	env.Args = nil
-	require.NoError(t, gunzipCommand(context.Background(), env))
+	inv, stdout, _ := NewTestEnv(t, "/work")
+	inv.Stdin = bytes.NewReader(gzipBytes(t, "from stdin"))
+	inv.Args = nil
+	require.NoError(t, gunzipCommand(context.Background(), inv))
 	assert.Equal(t, "from stdin", stdout.String())
 }
 
 func Test_zcat(t *testing.T) {
 	t.Parallel()
 
-	env, stdout, _ := NewTestEnv(t, "/work")
-	require.NoError(t, afero.WriteFile(env.FS, "/work/a.gz", gzipBytes(t, "cat me"), 0o644))
-	env.Args = []string{"a.gz"}
-	require.NoError(t, zcatCommand(context.Background(), env))
+	inv, stdout, _ := NewTestEnv(t, "/work")
+	require.NoError(t, afero.WriteFile(inv.FS, "/work/a.gz", gzipBytes(t, "cat me"), 0o644))
+	inv.Args = []string{"a.gz"}
+	require.NoError(t, zcatCommand(context.Background(), inv))
 
 	assert.Equal(t, "cat me", stdout.String())
 	// zcat keeps the input.
-	_, err := env.FS.Stat("/work/a.gz")
+	_, err := inv.FS.Stat("/work/a.gz")
 	require.NoError(t, err)
 }
 
 func Test_gunzip_badSuffix(t *testing.T) {
 	t.Parallel()
 
-	env, _, _ := NewTestEnv(t, "/work")
-	require.NoError(t, afero.WriteFile(env.FS, "/work/data", gzipBytes(t, "x"), 0o644))
-	env.Args = []string{"data"}
-	require.Error(t, gunzipCommand(context.Background(), env))
+	inv, _, _ := NewTestEnv(t, "/work")
+	require.NoError(t, afero.WriteFile(inv.FS, "/work/data", gzipBytes(t, "x"), 0o644))
+	inv.Args = []string{"data"}
+	require.Error(t, gunzipCommand(context.Background(), inv))
 }

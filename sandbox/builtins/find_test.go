@@ -84,16 +84,16 @@ func Test_find(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, stdout, _ := NewTestEnv(t, "/work")
+			inv, stdout, _ := NewTestEnv(t, "/work")
 			for path, body := range tc.seed {
-				mustWrite(t, env.FS, path, body)
+				mustWrite(t, inv.FS, path, body)
 			}
 			for _, dir := range tc.mkdirs {
-				mustMkdir(t, env.FS, dir)
+				mustMkdir(t, inv.FS, dir)
 			}
 
-			env.Args = tc.args
-			err := find(context.Background(), env)
+			inv.Args = tc.args
+			err := find(context.Background(), inv)
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -133,13 +133,13 @@ func Test_find_continuesPastDeniedEntries(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, base, stdout, stderr := NewTestEnvWithDeny(t, "/work", "find", tc.patterns...)
+			inv, base, stdout, stderr := NewTestEnvWithDeny(t, "/work", "find", tc.patterns...)
 			for p, body := range tc.seed {
 				mustWrite(t, base, p, body)
 			}
 
-			env.Args = tc.args
-			err := find(context.Background(), env)
+			inv.Args = tc.args
+			err := find(context.Background(), inv)
 
 			var ee *command.ExitError
 			require.ErrorAs(t, err, &ee)

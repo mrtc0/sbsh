@@ -30,7 +30,7 @@ func containedPath(base, name string) (string, error) {
 
 // walkedName turns a VFS absolute path produced by afero.Walk back into the
 // display name a user expects, using the argument they typed as the prefix
-// (abs must equal env.Abs(arg), the root the walk started from).
+// (abs must equal inv.Abs(arg), the root the walk started from).
 //
 // It follows GNU find/grep semantics: the argument is kept verbatim and each
 // descendant is joined to it with a single separator. This preserves a typed

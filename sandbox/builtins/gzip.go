@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/spf13/afero"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // gzipCommand compresses files with gzip. Without files it reads stdin and
@@ -17,37 +19,37 @@ import (
 //
 //	-c write to stdout and keep inputs / -d decompress / -k keep input files
 //	gzip [-cdk] [file...]
-func gzipCommand(_ context.Context, env *Env) error {
+func gzipCommand(_ context.Context, inv *command.Invocation) error {
 	fs := NewFlagSet()
 	decompress := fs.Bool("-d", "--decompress")
 	stdout := fs.Bool("-c", "--stdout")
 	keepFlag := fs.Bool("-k", "--keep")
-	files, err := fs.Parse(env.Args)
+	files, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
 	if *decompress {
-		return gunzipFiles(env, files, *stdout, *keepFlag)
+		return gunzipFiles(inv, files, *stdout, *keepFlag)
 	}
 	toStdout := *stdout
 	keep := *keepFlag
 
 	if len(files) == 0 {
-		b, err := readSource(env, "-")
+		b, err := readSource(inv, "-")
 		if err != nil {
 			return err
 		}
-		return writeGzip(env.Stdout, b)
+		return writeGzip(inv.Stdout, b)
 	}
 
 	for _, f := range files {
-		abs := env.Abs(f)
-		b, err := afero.ReadFile(env.FS, abs)
+		abs := inv.Abs(f)
+		b, err := afero.ReadFile(inv.FS, abs)
 		if err != nil {
 			return err
 		}
 		if toStdout {
-			if err := writeGzip(env.Stdout, b); err != nil {
+			if err := writeGzip(inv.Stdout, b); err != nil {
 				return err
 			}
 			continue
@@ -56,11 +58,11 @@ func gzipCommand(_ context.Context, env *Env) error {
 		if err := writeGzip(&buf, b); err != nil {
 			return err
 		}
-		if err := afero.WriteFile(env.FS, abs+".gz", buf.Bytes(), 0o644); err != nil {
+		if err := afero.WriteFile(inv.FS, abs+".gz", buf.Bytes(), 0o644); err != nil {
 			return err
 		}
 		if !keep {
-			if err := env.FS.Remove(abs); err != nil {
+			if err := inv.FS.Remove(abs); err != nil {
 				return err
 			}
 		}
@@ -73,31 +75,31 @@ func gzipCommand(_ context.Context, env *Env) error {
 // the archive unless -k or -c is given.
 //
 //	gunzip [-ck] [file...]
-func gunzipCommand(_ context.Context, env *Env) error {
+func gunzipCommand(_ context.Context, inv *command.Invocation) error {
 	fs := NewFlagSet()
 	stdout := fs.Bool("-c", "--stdout")
 	keep := fs.Bool("-k", "--keep")
-	files, err := fs.Parse(env.Args)
+	files, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
-	return gunzipFiles(env, files, *stdout, *keep)
+	return gunzipFiles(inv, files, *stdout, *keep)
 }
 
 // zcatCommand decompresses gzip files to stdout, always keeping the inputs.
 //
 //	zcat [file...]
-func zcatCommand(_ context.Context, env *Env) error {
-	files, err := NewFlagSet().Parse(env.Args)
+func zcatCommand(_ context.Context, inv *command.Invocation) error {
+	files, err := NewFlagSet().Parse(inv.Args)
 	if err != nil {
 		return err
 	}
-	return gunzipFiles(env, files, true, true)
+	return gunzipFiles(inv, files, true, true)
 }
 
-func gunzipFiles(env *Env, files []string, toStdout, keep bool) error {
+func gunzipFiles(inv *command.Invocation, files []string, toStdout, keep bool) error {
 	if len(files) == 0 {
-		b, err := readSource(env, "-")
+		b, err := readSource(inv, "-")
 		if err != nil {
 			return err
 		}
@@ -105,13 +107,13 @@ func gunzipFiles(env *Env, files []string, toStdout, keep bool) error {
 		if err != nil {
 			return err
 		}
-		_, err = env.Stdout.Write(out)
+		_, err = inv.Stdout.Write(out)
 		return err
 	}
 
 	for _, f := range files {
-		abs := env.Abs(f)
-		b, err := afero.ReadFile(env.FS, abs)
+		abs := inv.Abs(f)
+		b, err := afero.ReadFile(inv.FS, abs)
 		if err != nil {
 			return err
 		}
@@ -120,7 +122,7 @@ func gunzipFiles(env *Env, files []string, toStdout, keep bool) error {
 			return err
 		}
 		if toStdout {
-			if _, err := env.Stdout.Write(out); err != nil {
+			if _, err := inv.Stdout.Write(out); err != nil {
 				return err
 			}
 			continue
@@ -129,11 +131,11 @@ func gunzipFiles(env *Env, files []string, toStdout, keep bool) error {
 			return fmt.Errorf("%s: unknown suffix -- ignored", f)
 		}
 		target := strings.TrimSuffix(abs, ".gz")
-		if err := afero.WriteFile(env.FS, target, out, 0o644); err != nil {
+		if err := afero.WriteFile(inv.FS, target, out, 0o644); err != nil {
 			return err
 		}
 		if !keep {
-			if err := env.FS.Remove(abs); err != nil {
+			if err := inv.FS.Remove(abs); err != nil {
 				return err
 			}
 		}

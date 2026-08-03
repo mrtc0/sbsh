@@ -15,23 +15,23 @@ func Test_diff(t *testing.T) {
 
 	t.Run("identical files produce no output and exit 0", func(t *testing.T) {
 		t.Parallel()
-		env, stdout, _ := NewTestEnv(t, "/work")
-		mustWrite(t, env.FS, "/work/a", "same\n")
-		mustWrite(t, env.FS, "/work/b", "same\n")
+		inv, stdout, _ := NewTestEnv(t, "/work")
+		mustWrite(t, inv.FS, "/work/a", "same\n")
+		mustWrite(t, inv.FS, "/work/b", "same\n")
 
-		env.Args = []string{"a", "b"}
-		require.NoError(t, diffCommand(context.Background(), env))
+		inv.Args = []string{"a", "b"}
+		require.NoError(t, diffCommand(context.Background(), inv))
 		assert.Empty(t, stdout.String())
 	})
 
 	t.Run("emits a unified hunk and exits 1", func(t *testing.T) {
 		t.Parallel()
-		env, stdout, _ := NewTestEnv(t, "/work")
-		mustWrite(t, env.FS, "/work/a", "line1\nline2\nline3\n")
-		mustWrite(t, env.FS, "/work/b", "line1\nCHANGED\nline3\n")
+		inv, stdout, _ := NewTestEnv(t, "/work")
+		mustWrite(t, inv.FS, "/work/a", "line1\nline2\nline3\n")
+		mustWrite(t, inv.FS, "/work/b", "line1\nCHANGED\nline3\n")
 
-		env.Args = []string{"a", "b"}
-		err := diffCommand(context.Background(), env)
+		inv.Args = []string{"a", "b"}
+		err := diffCommand(context.Background(), inv)
 		var ee *command.ExitError
 		require.ErrorAs(t, err, &ee)
 		assert.Equal(t, 1, ee.Code)

@@ -51,15 +51,15 @@ func TestPythonCommand_Invocation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, _, _ := NewTestEnv(t, tc.dir)
+			inv, _, _ := NewTestEnv(t, tc.dir)
 			fp := &fakePython{}
-			env.Python = fp
+			inv.Python = fp
 			for path, body := range tc.seed {
-				require.NoError(t, afero.WriteFile(env.FS, path, []byte(body), 0o644))
+				require.NoError(t, afero.WriteFile(inv.FS, path, []byte(body), 0o644))
 			}
 
-			env.Args = tc.args
-			require.NoError(t, pythonCommand(context.Background(), env))
+			inv.Args = tc.args
+			require.NoError(t, pythonCommand(context.Background(), inv))
 
 			assert.Equal(t, tc.wantCode, fp.got.Code, "Code must be verbatim (no prelude)")
 			assert.Equal(t, tc.wantArgv, fp.got.Argv)
@@ -71,13 +71,13 @@ func TestPythonCommand_Invocation(t *testing.T) {
 func TestPythonCommand_PassesEnvironment(t *testing.T) {
 	t.Parallel()
 
-	env, _, _ := NewTestEnv(t, "/work")
-	env.Env = NewEnviron(expand.ListEnviron("FOO=bar", "EMPTY="))
+	inv, _, _ := NewTestEnv(t, "/work")
+	inv.Env = NewEnviron(expand.ListEnviron("FOO=bar", "EMPTY="))
 	fp := &fakePython{}
-	env.Python = fp
+	inv.Python = fp
 
-	env.Args = []string{"-c", "pass"}
-	require.NoError(t, pythonCommand(context.Background(), env))
+	inv.Args = []string{"-c", "pass"}
+	require.NoError(t, pythonCommand(context.Background(), inv))
 
 	assert.ElementsMatch(t, []string{"FOO=bar", "EMPTY="}, fp.got.Env)
 }

@@ -7,6 +7,8 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 func Test_mv(t *testing.T) {
@@ -14,29 +16,29 @@ func Test_mv(t *testing.T) {
 
 	cases := map[string]struct {
 		args    []string
-		setup   func(t *testing.T, env *Env)
+		setup   func(t *testing.T, inv *command.Invocation)
 		wantErr bool
-		check   func(t *testing.T, env *Env)
+		check   func(t *testing.T, inv *command.Invocation)
 	}{
 		"renames a file": {
 			args: []string{"old", "new"},
-			setup: func(t *testing.T, env *Env) {
-				mustWrite(t, env.FS, "/work/old", "data")
+			setup: func(t *testing.T, inv *command.Invocation) {
+				mustWrite(t, inv.FS, "/work/old", "data")
 			},
-			check: func(t *testing.T, env *Env) {
-				assert.Equal(t, "data", mustRead(t, env.FS, "/work/new"))
-				exists, _ := afero.Exists(env.FS, "/work/old")
+			check: func(t *testing.T, inv *command.Invocation) {
+				assert.Equal(t, "data", mustRead(t, inv.FS, "/work/new"))
+				exists, _ := afero.Exists(inv.FS, "/work/old")
 				assert.False(t, exists, "old should no longer exist")
 			},
 		},
 		"moves into an existing directory using the base name": {
 			args: []string{"f", "dst"},
-			setup: func(t *testing.T, env *Env) {
-				mustWrite(t, env.FS, "/work/f", "x")
-				mustMkdir(t, env.FS, "/work/dst")
+			setup: func(t *testing.T, inv *command.Invocation) {
+				mustWrite(t, inv.FS, "/work/f", "x")
+				mustMkdir(t, inv.FS, "/work/dst")
 			},
-			check: func(t *testing.T, env *Env) {
-				assert.Equal(t, "x", mustRead(t, env.FS, "/work/dst/f"))
+			check: func(t *testing.T, inv *command.Invocation) {
+				assert.Equal(t, "x", mustRead(t, inv.FS, "/work/dst/f"))
 			},
 		},
 		"errors with too few arguments": {
@@ -53,13 +55,13 @@ func Test_mv(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, _, _ := NewTestEnv(t, "/work")
+			inv, _, _ := NewTestEnv(t, "/work")
 			if tc.setup != nil {
-				tc.setup(t, env)
+				tc.setup(t, inv)
 			}
 
-			env.Args = tc.args
-			err := mv(context.Background(), env)
+			inv.Args = tc.args
+			err := mv(context.Background(), inv)
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -67,7 +69,7 @@ func Test_mv(t *testing.T) {
 			require.NoError(t, err)
 
 			if tc.check != nil {
-				tc.check(t, env)
+				tc.check(t, inv)
 			}
 		})
 	}

@@ -31,9 +31,9 @@ func Test_basename(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, stdout, _ := NewTestEnv(t, "/work")
-			env.Args = tc.args
-			err := basename(context.Background(), env)
+			inv, stdout, _ := NewTestEnv(t, "/work")
+			inv.Args = tc.args
+			err := basename(context.Background(), inv)
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -64,9 +64,9 @@ func Test_dirname(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, stdout, _ := NewTestEnv(t, "/work")
-			env.Args = tc.args
-			err := dirname(context.Background(), env)
+			inv, stdout, _ := NewTestEnv(t, "/work")
+			inv.Args = tc.args
+			err := dirname(context.Background(), inv)
 			if tc.wantErr {
 				require.Error(t, err)
 				return

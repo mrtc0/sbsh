@@ -16,46 +16,46 @@ import (
 func Test_tar_createListExtract(t *testing.T) {
 	t.Parallel()
 
-	env, stdout, _ := NewTestEnv(t, "/work")
-	mustWrite(t, env.FS, "/work/src/a.txt", "alpha")
-	mustWrite(t, env.FS, "/work/src/sub/b.txt", "bravo")
+	inv, stdout, _ := NewTestEnv(t, "/work")
+	mustWrite(t, inv.FS, "/work/src/a.txt", "alpha")
+	mustWrite(t, inv.FS, "/work/src/sub/b.txt", "bravo")
 
 	// Create.
-	env.Args = []string{"-cf", "out.tar", "src"}
-	require.NoError(t, tarCommand(context.Background(), env))
-	_, err := env.FS.Stat("/work/out.tar")
+	inv.Args = []string{"-cf", "out.tar", "src"}
+	require.NoError(t, tarCommand(context.Background(), inv))
+	_, err := inv.FS.Stat("/work/out.tar")
 	require.NoError(t, err)
 
 	// List.
-	env.Args = []string{"-tf", "out.tar"}
-	require.NoError(t, tarCommand(context.Background(), env))
+	inv.Args = []string{"-tf", "out.tar"}
+	require.NoError(t, tarCommand(context.Background(), inv))
 	list := stdout.String()
 	assert.Contains(t, list, "src/a.txt")
 	assert.Contains(t, list, "src/sub/b.txt")
 
 	// Extract into a fresh directory via -C.
-	env2, _, _ := NewTestEnv(t, "/work")
+	inv2, _, _ := NewTestEnv(t, "/work")
 	// Carry the archive over to the new filesystem.
-	mustWrite(t, env2.FS, "/work/out.tar", mustRead(t, env.FS, "/work/out.tar"))
-	require.NoError(t, env2.FS.MkdirAll("/work/dest", 0o755))
-	env2.Args = []string{"-xf", "out.tar", "-C", "dest"}
-	require.NoError(t, tarCommand(context.Background(), env2))
+	mustWrite(t, inv2.FS, "/work/out.tar", mustRead(t, inv.FS, "/work/out.tar"))
+	require.NoError(t, inv2.FS.MkdirAll("/work/dest", 0o755))
+	inv2.Args = []string{"-xf", "out.tar", "-C", "dest"}
+	require.NoError(t, tarCommand(context.Background(), inv2))
 
-	assert.Equal(t, "alpha", mustRead(t, env2.FS, "/work/dest/src/a.txt"))
-	assert.Equal(t, "bravo", mustRead(t, env2.FS, "/work/dest/src/sub/b.txt"))
+	assert.Equal(t, "alpha", mustRead(t, inv2.FS, "/work/dest/src/a.txt"))
+	assert.Equal(t, "bravo", mustRead(t, inv2.FS, "/work/dest/src/sub/b.txt"))
 }
 
 func Test_tar_createFromCurrentDir(t *testing.T) {
 	t.Parallel()
 
-	env, stdout, _ := NewTestEnv(t, "/work")
-	mustWrite(t, env.FS, "/work/src/a.txt", "alpha")
-	mustWrite(t, env.FS, "/work/src/sub/b.txt", "bravo")
+	inv, stdout, _ := NewTestEnv(t, "/work")
+	mustWrite(t, inv.FS, "/work/src/a.txt", "alpha")
+	mustWrite(t, inv.FS, "/work/src/sub/b.txt", "bravo")
 
-	env.Args = []string{"-cf", "out.tar", "."}
-	require.NoError(t, tarCommand(context.Background(), env))
-	env.Args = []string{"-tf", "out.tar"}
-	require.NoError(t, tarCommand(context.Background(), env))
+	inv.Args = []string{"-cf", "out.tar", "."}
+	require.NoError(t, tarCommand(context.Background(), inv))
+	inv.Args = []string{"-tf", "out.tar"}
+	require.NoError(t, tarCommand(context.Background(), inv))
 
 	for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
 		assert.Falsef(t, strings.HasPrefix(line, "/"),
@@ -66,36 +66,36 @@ func Test_tar_createFromCurrentDir(t *testing.T) {
 	assert.Contains(t, list, "./src/sub/b.txt")
 
 	// Round-trips: extracting the "." archive restores the tree under -C.
-	env2, _, _ := NewTestEnv(t, "/work")
-	mustWrite(t, env2.FS, "/work/out.tar", mustRead(t, env.FS, "/work/out.tar"))
-	require.NoError(t, env2.FS.MkdirAll("/work/dest", 0o755))
-	env2.Args = []string{"-xf", "out.tar", "-C", "dest"}
-	require.NoError(t, tarCommand(context.Background(), env2))
-	assert.Equal(t, "alpha", mustRead(t, env2.FS, "/work/dest/src/a.txt"))
-	assert.Equal(t, "bravo", mustRead(t, env2.FS, "/work/dest/src/sub/b.txt"))
+	inv2, _, _ := NewTestEnv(t, "/work")
+	mustWrite(t, inv2.FS, "/work/out.tar", mustRead(t, inv.FS, "/work/out.tar"))
+	require.NoError(t, inv2.FS.MkdirAll("/work/dest", 0o755))
+	inv2.Args = []string{"-xf", "out.tar", "-C", "dest"}
+	require.NoError(t, tarCommand(context.Background(), inv2))
+	assert.Equal(t, "alpha", mustRead(t, inv2.FS, "/work/dest/src/a.txt"))
+	assert.Equal(t, "bravo", mustRead(t, inv2.FS, "/work/dest/src/sub/b.txt"))
 }
 
 func Test_tar_gzipRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	env, _, _ := NewTestEnv(t, "/work")
-	mustWrite(t, env.FS, "/work/f.txt", "compressed member")
+	inv, _, _ := NewTestEnv(t, "/work")
+	mustWrite(t, inv.FS, "/work/f.txt", "compressed member")
 
-	env.Args = []string{"-czf", "out.tgz", "f.txt"}
-	require.NoError(t, tarCommand(context.Background(), env))
-	env.Args = []string{"-xzf", "out.tgz", "-C", "restored"}
-	require.NoError(t, tarCommand(context.Background(), env))
+	inv.Args = []string{"-czf", "out.tgz", "f.txt"}
+	require.NoError(t, tarCommand(context.Background(), inv))
+	inv.Args = []string{"-xzf", "out.tgz", "-C", "restored"}
+	require.NoError(t, tarCommand(context.Background(), inv))
 
-	assert.Equal(t, "compressed member", mustRead(t, env.FS, "/work/restored/f.txt"))
+	assert.Equal(t, "compressed member", mustRead(t, inv.FS, "/work/restored/f.txt"))
 }
 
 func Test_tar_verbose(t *testing.T) {
 	t.Parallel()
 
-	env, stdout, _ := NewTestEnv(t, "/work")
-	mustWrite(t, env.FS, "/work/only.txt", "x")
-	env.Args = []string{"-cvf", "out.tar", "only.txt"}
-	require.NoError(t, tarCommand(context.Background(), env))
+	inv, stdout, _ := NewTestEnv(t, "/work")
+	mustWrite(t, inv.FS, "/work/only.txt", "x")
+	inv.Args = []string{"-cvf", "out.tar", "only.txt"}
+	require.NoError(t, tarCommand(context.Background(), inv))
 	assert.Contains(t, stdout.String(), "only.txt")
 }
 
@@ -179,23 +179,23 @@ func Test_tar_extractConfinesMembers(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			env, _, _ := NewTestEnv(t, "/work")
-			mustWrite(t, env.FS, "/work/out.tar", hostileTar(t, tt.member))
-			require.NoError(t, env.FS.MkdirAll("/work/dest", 0o755))
+			inv, _, _ := NewTestEnv(t, "/work")
+			mustWrite(t, inv.FS, "/work/out.tar", hostileTar(t, tt.member))
+			require.NoError(t, inv.FS.MkdirAll("/work/dest", 0o755))
 
-			env.Args = tt.args
-			err := tarCommand(context.Background(), env)
+			inv.Args = tt.args
+			err := tarCommand(context.Background(), inv)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.member,
 					"the error must name the offending member")
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, "payload of "+tt.member, mustRead(t, env.FS, tt.want))
+				assert.Equal(t, "payload of "+tt.member, mustRead(t, inv.FS, tt.want))
 			}
 
 			for _, p := range tt.absent {
-				_, err := env.FS.Stat(p)
+				_, err := inv.FS.Stat(p)
 				assert.Errorf(t, err, "%s must not have been created", p)
 			}
 		})
@@ -205,15 +205,15 @@ func Test_tar_extractConfinesMembers(t *testing.T) {
 func Test_tar_extractKeepsMembersWrittenBeforeTheRejection(t *testing.T) {
 	t.Parallel()
 
-	env, _, _ := NewTestEnv(t, "/work")
-	mustWrite(t, env.FS, "/work/out.tar", hostileTar(t, "ok.txt", "../escape.txt"))
-	require.NoError(t, env.FS.MkdirAll("/work/dest", 0o755))
+	inv, _, _ := NewTestEnv(t, "/work")
+	mustWrite(t, inv.FS, "/work/out.tar", hostileTar(t, "ok.txt", "../escape.txt"))
+	require.NoError(t, inv.FS.MkdirAll("/work/dest", 0o755))
 
-	env.Args = []string{"-xf", "out.tar", "-C", "dest"}
-	require.Error(t, tarCommand(context.Background(), env))
+	inv.Args = []string{"-xf", "out.tar", "-C", "dest"}
+	require.Error(t, tarCommand(context.Background(), inv))
 
-	assert.Equal(t, "payload of ok.txt", mustRead(t, env.FS, "/work/dest/ok.txt"))
-	_, err := env.FS.Stat("/work/escape.txt")
+	assert.Equal(t, "payload of ok.txt", mustRead(t, inv.FS, "/work/dest/ok.txt"))
+	_, err := inv.FS.Stat("/work/escape.txt")
 	assert.Error(t, err)
 }
 
@@ -222,23 +222,23 @@ func Test_tar_errors(t *testing.T) {
 
 	t.Run("no mode", func(t *testing.T) {
 		t.Parallel()
-		env, _, _ := NewTestEnv(t, "/work")
-		env.Args = []string{"-f", "out.tar"}
-		require.Error(t, tarCommand(context.Background(), env))
+		inv, _, _ := NewTestEnv(t, "/work")
+		inv.Args = []string{"-f", "out.tar"}
+		require.Error(t, tarCommand(context.Background(), inv))
 	})
 
 	t.Run("create without files", func(t *testing.T) {
 		t.Parallel()
-		env, _, _ := NewTestEnv(t, "/work")
-		env.Args = []string{"-cf", "out.tar"}
-		require.Error(t, tarCommand(context.Background(), env))
+		inv, _, _ := NewTestEnv(t, "/work")
+		inv.Args = []string{"-cf", "out.tar"}
+		require.Error(t, tarCommand(context.Background(), inv))
 	})
 
 	t.Run("unknown flag", func(t *testing.T) {
 		t.Parallel()
-		env, _, _ := NewTestEnv(t, "/work")
-		env.Args = []string{"-cq", "out.tar", "x"}
-		require.Error(t, tarCommand(context.Background(), env))
+		inv, _, _ := NewTestEnv(t, "/work")
+		inv.Args = []string{"-cq", "out.tar", "x"}
+		require.Error(t, tarCommand(context.Background(), inv))
 	})
 }
 
@@ -248,13 +248,13 @@ func Test_tar_errors(t *testing.T) {
 func Test_tar_createContinuesPastDeniedEntries(t *testing.T) {
 	t.Parallel()
 
-	env, base, _, stderr := NewTestEnvWithDeny(t, "/work", "tar", "**/.env")
+	inv, base, _, stderr := NewTestEnvWithDeny(t, "/work", "tar", "**/.env")
 	mustWrite(t, base, "/work/src/.env", "SECRET")
 	mustWrite(t, base, "/work/src/a.txt", "alpha")
 	mustWrite(t, base, "/work/src/sub/b.txt", "bravo")
 
-	env.Args = []string{"-cf", "out.tar", "src"}
-	err := tarCommand(context.Background(), env)
+	inv.Args = []string{"-cf", "out.tar", "src"}
+	err := tarCommand(context.Background(), inv)
 
 	var ee *command.ExitError
 	require.ErrorAs(t, err, &ee)

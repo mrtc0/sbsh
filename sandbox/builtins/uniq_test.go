@@ -51,11 +51,11 @@ func Test_uniq(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, stdout, _ := NewTestEnv(t, "/work")
-			env.Stdin = strings.NewReader(tc.stdin)
+			inv, stdout, _ := NewTestEnv(t, "/work")
+			inv.Stdin = strings.NewReader(tc.stdin)
 
-			env.Args = tc.args
-			require.NoError(t, uniqCommand(context.Background(), env))
+			inv.Args = tc.args
+			require.NoError(t, uniqCommand(context.Background(), inv))
 			assert.Equal(t, tc.want, stdout.String())
 		})
 	}

@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/spf13/afero"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // patchCommand applies a unified diff to files in the virtual filesystem. The
@@ -26,11 +28,11 @@ import (
 // any of those reasons leaves no partial edit behind and reports nothing as
 // patched. What the write phase cannot promise is the filesystem: a write that
 // fails on its own, leaves the files written before it in place.
-func patchCommand(_ context.Context, env *Env) error {
+func patchCommand(_ context.Context, inv *command.Invocation) error {
 	fs := NewFlagSet()
 	patchFileFlag := fs.String("", "-i")
 	stripFlag := fs.String("0", "-p")
-	operands, err := fs.Parse(env.Args)
+	operands, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -41,7 +43,7 @@ func patchCommand(_ context.Context, env *Env) error {
 	if err != nil {
 		return fmt.Errorf("invalid strip count: %q", *stripFlag)
 	}
-	data, err := readSource(env, *patchFileFlag)
+	data, err := readSource(inv, *patchFileFlag)
 	if err != nil {
 		return err
 	}
@@ -54,16 +56,16 @@ func patchCommand(_ context.Context, env *Env) error {
 		return fmt.Errorf("no unified diff found in input")
 	}
 
-	actions, err := planPatches(env, patches, strip)
+	actions, err := planPatches(inv, patches, strip)
 	if err != nil {
 		return err
 	}
 
 	for _, a := range actions {
-		if err := a.apply(env); err != nil {
+		if err := a.apply(inv); err != nil {
 			return err
 		}
-		fmt.Fprintf(env.Stdout, "patching file %s\n", a.target.display)
+		fmt.Fprintf(inv.Stdout, "patching file %s\n", a.target.display)
 	}
 	return nil
 }
@@ -75,11 +77,11 @@ type patchAction struct {
 	lines  []string // the content to write when remove is false
 }
 
-func (a patchAction) apply(env *Env) error {
+func (a patchAction) apply(inv *command.Invocation) error {
 	if a.remove {
-		return env.FS.Remove(a.target.abs)
+		return inv.FS.Remove(a.target.abs)
 	}
-	return writeLines(env, a.target.abs, a.lines)
+	return writeLines(inv, a.target.abs, a.lines)
 }
 
 // plannedFile is what a diff has decided about a path so far: gone reports a
@@ -97,12 +99,12 @@ type plannedFile struct {
 // disk, so a diff naming the same path twice applies its second section to the
 // result of the first, and a section naming a path an earlier one deleted is
 // rejected instead of resurrecting the old content.
-func planPatches(env *Env, patches []filePatch, strip int) ([]patchAction, error) {
+func planPatches(inv *command.Invocation, patches []filePatch, strip int) ([]patchAction, error) {
 	actions := make([]patchAction, 0, len(patches))
 	planned := make(map[string]plannedFile, len(patches))
 
 	for _, fp := range patches {
-		target, err := resolvePatchTarget(env, fp.targetName(), strip)
+		target, err := resolvePatchTarget(inv, fp.targetName(), strip)
 		if err != nil {
 			return nil, err
 		}
@@ -111,7 +113,7 @@ func planPatches(env *Env, patches []filePatch, strip int) ([]patchAction, error
 			// A deletion has no hunk to apply, so the file's presence is the only
 			// thing that can reject it. Asking here rather than at Remove keeps a
 			// missing file from rejecting the diff after earlier files are written.
-			if err := checkDeletable(env, planned, target); err != nil {
+			if err := checkDeletable(inv, planned, target); err != nil {
 				return nil, err
 			}
 			planned[target.abs] = plannedFile{gone: true}
@@ -123,7 +125,7 @@ func planPatches(env *Env, patches []filePatch, strip int) ([]patchAction, error
 		// replaced rather than read.
 		var orig []string
 		if fp.oldName != "/dev/null" {
-			orig, err = plannedLines(env, planned, target)
+			orig, err = plannedLines(inv, planned, target)
 			if err != nil {
 				return nil, err
 			}
@@ -140,14 +142,14 @@ func planPatches(env *Env, patches []filePatch, strip int) ([]patchAction, error
 
 // plannedLines returns the content a section should be applied to: what an
 // earlier section decided, or the file as it is on disk.
-func plannedLines(env *Env, planned map[string]plannedFile, target patchTarget) ([]string, error) {
+func plannedLines(inv *command.Invocation, planned map[string]plannedFile, target patchTarget) ([]string, error) {
 	if p, ok := planned[target.abs]; ok {
 		if p.gone {
 			return nil, fmt.Errorf("%s: deleted earlier in this patch", target.display)
 		}
 		return p.lines, nil
 	}
-	b, err := afero.ReadFile(env.FS, target.abs)
+	b, err := afero.ReadFile(inv.FS, target.abs)
 	if err != nil {
 		return nil, err
 	}
@@ -157,14 +159,14 @@ func plannedLines(env *Env, planned map[string]plannedFile, target patchTarget) 
 // checkDeletable rejects a deletion whose target is already gone: a path an
 // earlier section deleted, or a file absent from the filesystem. The content is
 // never read.
-func checkDeletable(env *Env, planned map[string]plannedFile, target patchTarget) error {
+func checkDeletable(inv *command.Invocation, planned map[string]plannedFile, target patchTarget) error {
 	if p, ok := planned[target.abs]; ok {
 		if p.gone {
 			return fmt.Errorf("%s: deleted earlier in this patch", target.display)
 		}
 		return nil
 	}
-	_, err := env.FS.Stat(target.abs)
+	_, err := inv.FS.Stat(target.abs)
 	return err
 }
 
@@ -183,24 +185,24 @@ type patchTarget struct {
 // and re-pointing that name at another location would substitute the file being edited.
 // A path climbing out with ".." is rejected for the same reason.
 // GNU patch has refused both since the fix for CVE-2010-4651.
-func resolvePatchTarget(env *Env, name string, strip int) (patchTarget, error) {
+func resolvePatchTarget(inv *command.Invocation, name string, strip int) (patchTarget, error) {
 	display := stripPath(name, strip)
 	if path.IsAbs(display) {
 		return patchTarget{}, fmt.Errorf("%q is an absolute path", display)
 	}
-	abs, err := containedPath(env.Dir, display)
+	abs, err := containedPath(inv.Dir, display)
 	if err != nil {
 		return patchTarget{}, err
 	}
 	return patchTarget{display: display, abs: abs}, nil
 }
 
-func writeLines(env *Env, abs string, lines []string) error {
+func writeLines(inv *command.Invocation, abs string, lines []string) error {
 	content := ""
 	if len(lines) > 0 {
 		content = strings.Join(lines, "\n") + "\n"
 	}
-	return afero.WriteFile(env.FS, abs, []byte(content), 0o644)
+	return afero.WriteFile(inv.FS, abs, []byte(content), 0o644)
 }
 
 // stripPath drops n leading path components, as patch's -pN does.

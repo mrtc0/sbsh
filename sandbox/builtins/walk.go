@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // walkGuard lets a command finish its work across entries the deny policy
@@ -17,14 +19,14 @@ import (
 // the end. Which code that is belongs to the command, since GNU does not use one
 // value for all of them.
 type walkGuard struct {
-	env     *Env
+	inv     *command.Invocation
 	refused bool
 }
 
 // report writes err to stderr and records that the command's result is
 // incomplete, so it can end with a non-zero status once its work is done.
 func (g *walkGuard) report(err error) {
-	fmt.Fprintf(g.env.Stderr, "%s: %v\n", g.env.Name, err)
+	fmt.Fprintf(g.inv.Stderr, "%s: %v\n", g.inv.Name, err)
 	g.refused = true
 }
 

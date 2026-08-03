@@ -111,11 +111,11 @@ func Test_curl(t *testing.T) {
 			var got capturedRequest
 			srv := curlTestServer(t, &got)
 
-			env, stdout, _ := NewTestEnv(t, "/work")
-			env.HTTP = &http.Client{}
+			inv, stdout, _ := NewTestEnv(t, "/work")
+			inv.HTTP = &http.Client{}
 
-			env.Args = append(tc.args, srv.URL+tc.path)
-			err := curl(context.Background(), env)
+			inv.Args = append(tc.args, srv.URL+tc.path)
+			err := curl(context.Background(), inv)
 
 			if tc.wantExit != 0 {
 				var ee *command.ExitError
@@ -134,7 +134,7 @@ func Test_curl(t *testing.T) {
 			}
 
 			if tc.wantFile != "" {
-				b, readErr := afero.ReadFile(env.FS, "/work/out.txt")
+				b, readErr := afero.ReadFile(inv.FS, "/work/out.txt")
 				require.NoError(t, readErr)
 				assert.Equal(t, tc.wantFile, string(b))
 			}
@@ -208,17 +208,17 @@ func Test_curlRequest(t *testing.T) {
 			var got capturedRequest
 			srv := curlTestServer(t, &got)
 
-			env, _, _ := NewTestEnv(t, "/work")
-			env.HTTP = &http.Client{}
+			inv, _, _ := NewTestEnv(t, "/work")
+			inv.HTTP = &http.Client{}
 			for path, body := range tc.seed {
-				mustWrite(t, env.FS, path, body)
+				mustWrite(t, inv.FS, path, body)
 			}
 			if tc.stdin != "" {
-				env.Stdin = strings.NewReader(tc.stdin)
+				inv.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			env.Args = append(tc.args, srv.URL+"/")
-			require.NoError(t, curl(context.Background(), env))
+			inv.Args = append(tc.args, srv.URL+"/")
+			require.NoError(t, curl(context.Background(), inv))
 
 			assert.Equal(t, tc.wantMethod, got.method, "method")
 			assert.Equal(t, tc.wantBody, got.body, "body")
@@ -264,13 +264,13 @@ func Test_curlRejects(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, _, _ := NewTestEnv(t, "/work")
+			inv, _, _ := NewTestEnv(t, "/work")
 			if !tc.noClient {
-				env.HTTP = &http.Client{}
+				inv.HTTP = &http.Client{}
 			}
 
-			env.Args = tc.args
-			err := curl(context.Background(), env)
+			inv.Args = tc.args
+			err := curl(context.Background(), inv)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.wantErrMsg)
 		})

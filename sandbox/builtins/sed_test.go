@@ -78,11 +78,11 @@ func Test_sed(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, stdout, _ := NewTestEnv(t, "/work")
-			env.Stdin = strings.NewReader(tc.stdin)
+			inv, stdout, _ := NewTestEnv(t, "/work")
+			inv.Stdin = strings.NewReader(tc.stdin)
 
-			env.Args = tc.args
-			require.NoError(t, sedCommand(context.Background(), env))
+			inv.Args = tc.args
+			require.NoError(t, sedCommand(context.Background(), inv))
 			assert.Equal(t, tc.want, stdout.String())
 		})
 	}
@@ -91,22 +91,22 @@ func Test_sed(t *testing.T) {
 func Test_sed_inPlace(t *testing.T) {
 	t.Parallel()
 
-	env, stdout, _ := NewTestEnv(t, "/work")
-	mustWrite(t, env.FS, "/work/f", "hello world\nhello again\n")
+	inv, stdout, _ := NewTestEnv(t, "/work")
+	mustWrite(t, inv.FS, "/work/f", "hello world\nhello again\n")
 
-	env.Args = []string{"-i", "s/hello/hi/", "f"}
-	require.NoError(t, sedCommand(context.Background(), env))
+	inv.Args = []string{"-i", "s/hello/hi/", "f"}
+	require.NoError(t, sedCommand(context.Background(), inv))
 
 	assert.Empty(t, stdout.String(), "-i must not write to stdout")
-	assert.Equal(t, "hi world\nhi again\n", mustRead(t, env.FS, "/work/f"))
+	assert.Equal(t, "hi world\nhi again\n", mustRead(t, inv.FS, "/work/f"))
 }
 
 func Test_sed_error(t *testing.T) {
 	t.Parallel()
 
-	env, _, _ := NewTestEnv(t, "/work")
-	env.Stdin = strings.NewReader("x\n")
+	inv, _, _ := NewTestEnv(t, "/work")
+	inv.Stdin = strings.NewReader("x\n")
 
-	env.Args = []string{"s/("}
-	require.Error(t, sedCommand(context.Background(), env))
+	inv.Args = []string{"s/("}
+	require.Error(t, sedCommand(context.Background(), inv))
 }

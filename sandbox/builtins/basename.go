@@ -5,33 +5,35 @@ import (
 	"fmt"
 	"path"
 	"strings"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // basename strips the directory from a path, printing the final component.
 // A second argument, when it is a suffix of the result, is removed.
 //
 //	basename path [suffix]
-func basename(_ context.Context, env *Env) error {
-	if len(env.Args) == 0 || len(env.Args) > 2 {
+func basename(_ context.Context, inv *command.Invocation) error {
+	if len(inv.Args) == 0 || len(inv.Args) > 2 {
 		return fmt.Errorf("usage: basename path [suffix]")
 	}
 
-	name := stripTrailingSlashes(env.Args[0])
+	name := stripTrailingSlashes(inv.Args[0])
 	if name == "" {
 		// A path of only slashes reduces to "/".
-		fmt.Fprintln(env.Stdout, "/")
+		fmt.Fprintln(inv.Stdout, "/")
 		return nil
 	}
 	base := path.Base(name)
 
-	if len(env.Args) == 2 {
-		suffix := env.Args[1]
+	if len(inv.Args) == 2 {
+		suffix := inv.Args[1]
 		if base != suffix && strings.HasSuffix(base, suffix) {
 			base = strings.TrimSuffix(base, suffix)
 		}
 	}
 
-	fmt.Fprintln(env.Stdout, base)
+	fmt.Fprintln(inv.Stdout, base)
 	return nil
 }
 

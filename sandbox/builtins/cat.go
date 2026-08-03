@@ -2,10 +2,12 @@ package builtins
 
 import (
 	"context"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
-func cat(_ context.Context, env *Env) error {
-	paths, err := NewFlagSet().Parse(env.Args)
+func cat(_ context.Context, inv *command.Invocation) error {
+	paths, err := NewFlagSet().Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -13,11 +15,11 @@ func cat(_ context.Context, env *Env) error {
 		paths = []string{"-"}
 	}
 	for _, p := range paths {
-		b, err := readSource(env, p)
+		b, err := readSource(inv, p)
 		if err != nil {
 			return err
 		}
-		if _, err := env.Stdout.Write(b); err != nil {
+		if _, err := inv.Stdout.Write(b); err != nil {
 			return err
 		}
 	}

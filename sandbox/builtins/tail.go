@@ -3,14 +3,16 @@ package builtins
 import (
 	"context"
 	"fmt"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // tail prints the last n lines (default 10) of each input. A negative n is
 // treated as its magnitude, so "-n -K" also prints the last K lines. With no
 // arguments it reads stdin. For multiple files it prefixes each with a
 // "==> name <==" header.
-func tail(_ context.Context, env *Env) error {
-	n, files, err := parseLineCount(env.Args, 10)
+func tail(_ context.Context, inv *command.Invocation) error {
+	n, files, err := parseLineCount(inv.Args, 10)
 	if err != nil {
 		return err
 	}
@@ -18,15 +20,15 @@ func tail(_ context.Context, env *Env) error {
 		files = []string{"-"}
 	}
 	for idx, f := range files {
-		b, err := readSource(env, f)
+		b, err := readSource(inv, f)
 		if err != nil {
 			return err
 		}
 		if len(files) > 1 {
 			if idx > 0 {
-				fmt.Fprintln(env.Stdout)
+				fmt.Fprintln(inv.Stdout)
 			}
-			fmt.Fprintf(env.Stdout, "==> %s <==\n", f)
+			fmt.Fprintf(inv.Stdout, "==> %s <==\n", f)
 		}
 		lines := splitLines(b)
 		count := n
@@ -38,7 +40,7 @@ func tail(_ context.Context, env *Env) error {
 			start = 0
 		}
 		for _, l := range lines[start:] {
-			fmt.Fprintln(env.Stdout, l)
+			fmt.Fprintln(inv.Stdout, l)
 		}
 	}
 	return nil

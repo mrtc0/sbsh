@@ -59,16 +59,16 @@ func Test_tail(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, stdout, _ := NewTestEnv(t, "/work")
+			inv, stdout, _ := NewTestEnv(t, "/work")
 			if tc.seed != "" {
-				mustWrite(t, env.FS, "/work/f", tc.seed)
+				mustWrite(t, inv.FS, "/work/f", tc.seed)
 			}
 			if tc.stdin != "" {
-				env.Stdin = strings.NewReader(tc.stdin)
+				inv.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			env.Args = tc.args
-			require.NoError(t, tail(context.Background(), env))
+			inv.Args = tc.args
+			require.NoError(t, tail(context.Background(), inv))
 
 			if tc.wantNewlines > 0 {
 				assert.Equal(t, tc.wantNewlines, strings.Count(stdout.String(), "\n"), "line count")

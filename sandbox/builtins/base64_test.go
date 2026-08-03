@@ -44,16 +44,16 @@ func Test_base64(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, stdout, _ := NewTestEnv(t, "/work")
+			inv, stdout, _ := NewTestEnv(t, "/work")
 			for path, body := range tc.seed {
-				mustWrite(t, env.FS, path, body)
+				mustWrite(t, inv.FS, path, body)
 			}
 			if tc.seed == nil {
-				env.Stdin = strings.NewReader(tc.stdin)
+				inv.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			env.Args = tc.args
-			require.NoError(t, base64Command(context.Background(), env))
+			inv.Args = tc.args
+			require.NoError(t, base64Command(context.Background(), inv))
 			assert.Equal(t, tc.want, stdout.String())
 		})
 	}
@@ -63,10 +63,10 @@ func Test_base64_wrap(t *testing.T) {
 	t.Parallel()
 
 	// 60 input bytes encode to 80 base64 characters, which wraps after 76.
-	env, stdout, _ := NewTestEnv(t, "/work")
-	env.Stdin = strings.NewReader(strings.Repeat("a", 60))
-	env.Args = nil
-	require.NoError(t, base64Command(context.Background(), env))
+	inv, stdout, _ := NewTestEnv(t, "/work")
+	inv.Stdin = strings.NewReader(strings.Repeat("a", 60))
+	inv.Args = nil
+	require.NoError(t, base64Command(context.Background(), inv))
 
 	out := stdout.String()
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
@@ -74,20 +74,20 @@ func Test_base64_wrap(t *testing.T) {
 	assert.Len(t, lines[0], 76)
 
 	// The wrapped output round-trips back to the original when decoded.
-	env2, stdout2, _ := NewTestEnv(t, "/work")
-	env2.Stdin = strings.NewReader(out)
-	env2.Args = []string{"-d"}
-	require.NoError(t, base64Command(context.Background(), env2))
+	inv2, stdout2, _ := NewTestEnv(t, "/work")
+	inv2.Stdin = strings.NewReader(out)
+	inv2.Args = []string{"-d"}
+	require.NoError(t, base64Command(context.Background(), inv2))
 	assert.Equal(t, strings.Repeat("a", 60), stdout2.String())
 }
 
 func Test_base64_noWrap(t *testing.T) {
 	t.Parallel()
 
-	env, stdout, _ := NewTestEnv(t, "/work")
-	env.Stdin = strings.NewReader(strings.Repeat("a", 60))
-	env.Args = []string{"-w", "0"}
-	require.NoError(t, base64Command(context.Background(), env))
+	inv, stdout, _ := NewTestEnv(t, "/work")
+	inv.Stdin = strings.NewReader(strings.Repeat("a", 60))
+	inv.Args = []string{"-w", "0"}
+	require.NoError(t, base64Command(context.Background(), inv))
 
 	out := strings.TrimRight(stdout.String(), "\n")
 	assert.NotContains(t, out, "\n")
@@ -97,8 +97,8 @@ func Test_base64_noWrap(t *testing.T) {
 func Test_base64_invalidDecode(t *testing.T) {
 	t.Parallel()
 
-	env, _, _ := NewTestEnv(t, "/work")
-	env.Stdin = strings.NewReader("!!!not-base64!!!")
-	env.Args = []string{"-d"}
-	require.Error(t, base64Command(context.Background(), env))
+	inv, _, _ := NewTestEnv(t, "/work")
+	inv.Stdin = strings.NewReader("!!!not-base64!!!")
+	inv.Args = []string{"-d"}
+	require.Error(t, base64Command(context.Background(), inv))
 }

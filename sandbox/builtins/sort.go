@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // sortCommand orders input lines. With no files it reads stdin; multiple files
@@ -13,13 +15,13 @@ import (
 //
 //	-r reverse / -n numeric / -u drop duplicate lines / -f fold case
 //	sort [-rnuf] [file...]
-func sortCommand(_ context.Context, env *Env) error {
+func sortCommand(_ context.Context, inv *command.Invocation) error {
 	fs := NewFlagSet()
 	reverseFlag := fs.Bool("-r")
 	numericFlag := fs.Bool("-n")
 	uniqueFlag := fs.Bool("-u")
 	foldFlag := fs.Bool("-f")
-	files, err := fs.Parse(env.Args)
+	files, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -27,14 +29,14 @@ func sortCommand(_ context.Context, env *Env) error {
 
 	var lines []string
 	if len(files) == 0 {
-		b, err := readSource(env, "-")
+		b, err := readSource(inv, "-")
 		if err != nil {
 			return err
 		}
 		lines = splitLines(b)
 	} else {
 		for _, f := range files {
-			b, err := readSource(env, f)
+			b, err := readSource(inv, f)
 			if err != nil {
 				return err
 			}
@@ -81,7 +83,7 @@ func sortCommand(_ context.Context, env *Env) error {
 	}
 
 	for _, l := range lines {
-		fmt.Fprintln(env.Stdout, l)
+		fmt.Fprintln(inv.Stdout, l)
 	}
 	return nil
 }

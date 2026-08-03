@@ -10,14 +10,16 @@ import (
 	"syscall"
 
 	"github.com/spf13/afero"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // rm removes files and directories. -r recurses; -f does not error when the target is missing.
-func rm(_ context.Context, env *Env) error {
+func rm(_ context.Context, inv *command.Invocation) error {
 	flags := NewFlagSet()
 	recursive := flags.Bool("-r", "-R")
 	force := flags.Bool("-f")
-	paths, err := flags.Parse(env.Args)
+	paths, err := flags.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -25,10 +27,10 @@ func rm(_ context.Context, env *Env) error {
 		return fmt.Errorf("usage: rm [-r] [-f] file...")
 	}
 
-	guard := &walkGuard{env: env}
+	guard := &walkGuard{inv: inv}
 	for _, p := range paths {
-		abs := env.Abs(p)
-		info, err := env.FS.Stat(abs)
+		abs := inv.Abs(p)
+		info, err := inv.FS.Stat(abs)
 		if err != nil {
 			if guard.skip(err) || (*force && errors.Is(err, fs.ErrNotExist)) {
 				continue
@@ -39,12 +41,12 @@ func rm(_ context.Context, env *Env) error {
 			if !*recursive {
 				return fmt.Errorf("%q is a directory", p)
 			}
-			if err := removeTree(env, guard, abs, *force); err != nil {
+			if err := removeTree(inv, guard, abs, *force); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := removeEntry(env, guard, abs, *force); err != nil {
+		if err := removeEntry(inv, guard, abs, *force); err != nil {
 			return err
 		}
 	}
@@ -62,9 +64,9 @@ func rm(_ context.Context, env *Env) error {
 //
 // Collecting the paths first and deleting them in reverse puts children before
 // their parents, the order rmdir requires.
-func removeTree(env *Env, guard *walkGuard, root string, force bool) error {
+func removeTree(inv *command.Invocation, guard *walkGuard, root string, force bool) error {
 	var paths []string
-	err := afero.Walk(env.FS, root, guard.wrap(func(p string, _ os.FileInfo, _ error) error {
+	err := afero.Walk(inv.FS, root, guard.wrap(func(p string, _ os.FileInfo, _ error) error {
 		paths = append(paths, p)
 		return nil
 	}))
@@ -74,7 +76,7 @@ func removeTree(env *Env, guard *walkGuard, root string, force bool) error {
 
 	slices.Reverse(paths)
 	for _, p := range paths {
-		if err := removeEntry(env, guard, p, force); err != nil {
+		if err := removeEntry(inv, guard, p, force); err != nil {
 			return err
 		}
 	}
@@ -85,8 +87,8 @@ func removeTree(env *Env, guard *walkGuard, root string, force bool) error {
 // directory left non-empty by a refusal below it. A missing path is an error
 // unless -f asked for it to be ignored: -f covers what was never there, not what
 // the policy refuses, so a refusal stays visible through "rm -rf".
-func removeEntry(env *Env, guard *walkGuard, p string, force bool) error {
-	err := env.FS.Remove(p)
+func removeEntry(inv *command.Invocation, guard *walkGuard, p string, force bool) error {
+	err := inv.FS.Remove(p)
 	switch {
 	case err == nil:
 		return nil

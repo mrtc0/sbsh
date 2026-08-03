@@ -17,18 +17,18 @@ func Test_rm(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]struct {
-		setup   func(t *testing.T, env *Env)
+		setup   func(t *testing.T, inv *command.Invocation)
 		args    []string
 		wantErr bool
-		check   func(t *testing.T, env *Env)
+		check   func(t *testing.T, inv *command.Invocation)
 	}{
 		"removes a file": {
-			setup: func(t *testing.T, env *Env) {
-				mustWrite(t, env.FS, "/work/f", "x")
+			setup: func(t *testing.T, inv *command.Invocation) {
+				mustWrite(t, inv.FS, "/work/f", "x")
 			},
 			args: []string{"f"},
-			check: func(t *testing.T, env *Env) {
-				ok, _ := afero.Exists(env.FS, "/work/f")
+			check: func(t *testing.T, inv *command.Invocation) {
+				ok, _ := afero.Exists(inv.FS, "/work/f")
 				assert.False(t, ok, "f should be gone")
 			},
 		},
@@ -40,20 +40,20 @@ func Test_rm(t *testing.T) {
 			args: []string{"-f", "nope"},
 		},
 		"refuses a directory without -r": {
-			setup: func(t *testing.T, env *Env) {
-				mustMkdir(t, env.FS, "/work/d")
+			setup: func(t *testing.T, inv *command.Invocation) {
+				mustMkdir(t, inv.FS, "/work/d")
 			},
 			args:    []string{"d"},
 			wantErr: true,
 		},
 		"-r removes a directory tree": {
-			setup: func(t *testing.T, env *Env) {
-				mustWrite(t, env.FS, "/work/d/a", "1")
-				mustWrite(t, env.FS, "/work/d/sub/b", "2")
+			setup: func(t *testing.T, inv *command.Invocation) {
+				mustWrite(t, inv.FS, "/work/d/a", "1")
+				mustWrite(t, inv.FS, "/work/d/sub/b", "2")
 			},
 			args: []string{"-r", "d"},
-			check: func(t *testing.T, env *Env) {
-				ok, _ := afero.Exists(env.FS, "/work/d")
+			check: func(t *testing.T, inv *command.Invocation) {
+				ok, _ := afero.Exists(inv.FS, "/work/d")
 				assert.False(t, ok, "directory tree should be gone")
 			},
 		},
@@ -63,13 +63,13 @@ func Test_rm(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, _, _ := NewTestEnv(t, "/work")
+			inv, _, _ := NewTestEnv(t, "/work")
 			if tc.setup != nil {
-				tc.setup(t, env)
+				tc.setup(t, inv)
 			}
 
-			env.Args = tc.args
-			err := rm(context.Background(), env)
+			inv.Args = tc.args
+			err := rm(context.Background(), inv)
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -77,7 +77,7 @@ func Test_rm(t *testing.T) {
 			require.NoError(t, err)
 
 			if tc.check != nil {
-				tc.check(t, env)
+				tc.check(t, inv)
 			}
 		})
 	}
@@ -134,14 +134,14 @@ func Test_rm_recursiveContinuesPastDeniedEntries(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			env, hostDir, _, stderr := NewTestEnvWithHostMount(t, "rm", "**/.env")
+			inv, hostDir, _, stderr := NewTestEnvWithHostMount(t, "rm", "**/.env")
 			for _, rel := range tc.seed {
 				require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(hostDir, rel)), 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(hostDir, rel), []byte("x"), 0644))
 			}
 
-			env.Args = tc.args
-			err := rm(context.Background(), env)
+			inv.Args = tc.args
+			err := rm(context.Background(), inv)
 
 			if tc.wantExit == 0 {
 				require.NoError(t, err)

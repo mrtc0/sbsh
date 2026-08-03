@@ -9,16 +9,18 @@ import (
 	"github.com/spf13/afero"
 
 	"github.com/mrtc0/sbsh/vfs"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // cp copies files and directories. -r/-R copies directories recursively.
 //
 //	cp [-r] source dest
 //	cp [-r] source... directory
-func cp(_ context.Context, env *Env) error {
+func cp(_ context.Context, inv *command.Invocation) error {
 	fs := NewFlagSet()
 	recursive := fs.Bool("-r", "-R")
-	rest, err := fs.Parse(env.Args)
+	rest, err := fs.Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -28,18 +30,18 @@ func cp(_ context.Context, env *Env) error {
 	dst := rest[len(rest)-1]
 	srcs := rest[:len(rest)-1]
 
-	dstAbs := env.Abs(dst)
-	dstInfo, dstErr := env.FS.Stat(dstAbs)
+	dstAbs := inv.Abs(dst)
+	dstInfo, dstErr := inv.FS.Stat(dstAbs)
 	dstIsDir := dstErr == nil && dstInfo.IsDir()
 
 	if len(srcs) > 1 && !dstIsDir {
 		return fmt.Errorf("target %q is not a directory", dst)
 	}
 
-	guard := &walkGuard{env: env}
+	guard := &walkGuard{inv: inv}
 	for _, s := range srcs {
-		srcAbs := env.Abs(s)
-		info, err := env.FS.Stat(srcAbs)
+		srcAbs := inv.Abs(s)
+		info, err := inv.FS.Stat(srcAbs)
 		if err != nil {
 			if guard.skip(err) {
 				continue
@@ -58,7 +60,7 @@ func cp(_ context.Context, env *Env) error {
 			// the link itself would find one entry and copy nothing, so the walk
 			// starts from what the link names: a source given as an argument is
 			// followed, which is what cp does with everything but -P.
-			root, err := env.FS.EvalSymlinks(srcAbs)
+			root, err := inv.FS.EvalSymlinks(srcAbs)
 			if err != nil {
 				if guard.skip(err) {
 					continue
@@ -71,12 +73,12 @@ func cp(_ context.Context, env *Env) error {
 			if rel := vfs.Rel(root, target); !path.IsAbs(rel) {
 				return fmt.Errorf("cannot copy a directory, %q, into itself, %q", s, dst)
 			}
-			if err := copyTree(env, guard, root, target); err != nil {
+			if err := copyTree(inv, guard, root, target); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := copyFile(env.FS, srcAbs, target, info.Mode()); err != nil {
+		if err := copyFile(inv.FS, srcAbs, target, info.Mode()); err != nil {
 			if guard.skip(err) {
 				continue
 			}
@@ -98,8 +100,8 @@ func copyFile(fs afero.Fs, src, dst string, mode os.FileMode) error {
 	return afero.WriteFile(fs, dst, b, mode)
 }
 
-func copyTree(env *Env, guard *walkGuard, src, dst string) error {
-	fs := env.FS
+func copyTree(inv *command.Invocation, guard *walkGuard, src, dst string) error {
+	fs := inv.FS
 	return afero.Walk(fs, src, guard.wrap(func(p string, info os.FileInfo, _ error) error {
 		// A link found below the source cannot be reproduced: the virtual
 		// filesystem has no way to create one. Copying the target under the link's

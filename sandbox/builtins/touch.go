@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // touch creates an empty file if it does not exist, or updates its modification time to now.
-func touch(_ context.Context, env *Env) error {
-	paths, err := NewFlagSet().Parse(env.Args)
+func touch(_ context.Context, inv *command.Invocation) error {
+	paths, err := NewFlagSet().Parse(inv.Args)
 	if err != nil {
 		return err
 	}
@@ -17,14 +19,14 @@ func touch(_ context.Context, env *Env) error {
 	}
 	now := time.Now()
 	for _, p := range paths {
-		abs := env.Abs(p)
-		if _, err := env.FS.Stat(abs); err == nil {
-			if err := env.FS.Chtimes(abs, now, now); err != nil {
+		abs := inv.Abs(p)
+		if _, err := inv.FS.Stat(abs); err == nil {
+			if err := inv.FS.Chtimes(abs, now, now); err != nil {
 				return err
 			}
 			continue
 		}
-		f, err := env.FS.Create(abs)
+		f, err := inv.FS.Create(abs)
 		if err != nil {
 			return err
 		}
