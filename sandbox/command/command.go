@@ -21,6 +21,21 @@ import (
 	"github.com/mrtc0/sbsh/vfs"
 )
 
+// Command is the minimum a command registered from Go must implement: a name to
+// be invoked by, a one-line description for the host to display, and the
+// behaviour itself.
+//
+// Name must be a plain word — letters, digits, "_", "." and "-" — because it is
+// matched against the first word of a command line, not looked up on a PATH.
+// Registration rejects anything else, an empty Description, and a name that a
+// builtin or the shell itself already answers to, since a command by such a name
+// could never run.
+type Command interface {
+	Name() string
+	Description() string
+	Run(ctx context.Context, inv *Invocation) error
+}
+
 // Invocation is everything a command is given for one call.
 //
 // Nothing in it is valid after the call returns: the streams belong to the
@@ -87,6 +102,16 @@ func (inv *Invocation) Abs(p string) string {
 	return vfs.Normalize(p)
 }
 
+// Getenv returns the value of the environment variable name, or the empty string
+// when it is unset. Use [Environ.Lookup] to tell the two apart.
+func (inv *Invocation) Getenv(name string) string {
+	if inv.Env == nil {
+		return ""
+	}
+	v, _ := inv.Env.Lookup(name)
+	return v
+}
+
 // RunFunc is a command's behaviour. Everything the command is given for one
 // call is in the Invocation, so a caller needs to hold nothing beside it.
 type RunFunc func(ctx context.Context, inv *Invocation) error
@@ -106,3 +131,31 @@ func (e *ExitError) Error() string { return fmt.Sprintf("exit status %d", uint8(
 
 // Exit returns an error that exits the command with code.
 func Exit(code int) error { return &ExitError{Code: code} }
+
+// New returns a [Command] with the given metadata that runs fn. It saves
+// declaring a type for a command that holds no state:
+//
+//	sandbox.WithCommand(command.New("hello", "greet the caller",
+//		func(_ context.Context, inv *command.Invocation) error {
+//			_, err := fmt.Fprintln(inv.Stdout, "hello")
+//			return err
+//		}))
+func New(name, description string, fn RunFunc) Command {
+	return &funcCommand{name: name, description: description, fn: fn}
+}
+
+type funcCommand struct {
+	name        string
+	description string
+	fn          RunFunc
+}
+
+func (c *funcCommand) Name() string        { return c.name }
+func (c *funcCommand) Description() string { return c.description }
+
+func (c *funcCommand) Run(ctx context.Context, inv *Invocation) error {
+	if c.fn == nil {
+		return fmt.Errorf("command %q has no implementation", c.name)
+	}
+	return c.fn(ctx, inv)
+}
