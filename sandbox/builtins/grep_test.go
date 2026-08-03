@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 func Test_grep(t *testing.T) {
@@ -138,9 +140,9 @@ func Test_grep(t *testing.T) {
 			case tc.wantErr:
 				require.Error(t, err)
 			case tc.wantExit1:
-				var ee exitError
+				var ee *command.ExitError
 				require.ErrorAs(t, err, &ee)
-				assert.Equal(t, 1, ee.code)
+				assert.Equal(t, 1, ee.Code)
 			default:
 				require.NoError(t, err)
 				if tc.wantContains != nil {
@@ -201,9 +203,9 @@ func Test_grep_recursiveContinuesPastDeniedEntries(t *testing.T) {
 			env.Args = tc.args
 			err := grep(context.Background(), env)
 
-			var ee exitError
+			var ee *command.ExitError
 			require.ErrorAs(t, err, &ee)
-			assert.Equal(t, 2, ee.code, "a refused entry exits 2, not 1")
+			assert.Equal(t, 2, ee.Code, "a refused entry exits 2, not 1")
 
 			for _, want := range tc.wantContains {
 				assert.Contains(t, stdout.String(), want)

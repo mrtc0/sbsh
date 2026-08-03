@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 func Test_tar_createListExtract(t *testing.T) {
@@ -254,9 +256,9 @@ func Test_tar_createContinuesPastDeniedEntries(t *testing.T) {
 	env.Args = []string{"-cf", "out.tar", "src"}
 	err := tarCommand(context.Background(), env)
 
-	var ee exitError
+	var ee *command.ExitError
 	require.ErrorAs(t, err, &ee)
-	assert.Equal(t, 2, ee.code)
+	assert.Equal(t, 2, ee.Code)
 	assert.Contains(t, stderr.String(), "tar:")
 	assert.Contains(t, stderr.String(), "permission denied")
 

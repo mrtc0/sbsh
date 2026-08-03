@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 func Test_awk(t *testing.T) {
@@ -110,9 +112,9 @@ func Test_awk_exitStatus(t *testing.T) {
 
 	env.Args = []string{"BEGIN{exit 3}"}
 	err := awkCommand(context.Background(), env)
-	var ee exitError
+	var ee *command.ExitError
 	require.ErrorAs(t, err, &ee)
-	assert.Equal(t, 3, ee.code)
+	assert.Equal(t, 3, ee.Code)
 }
 
 // Test_awk_sandboxed asserts the interpreter cannot reach the host: process

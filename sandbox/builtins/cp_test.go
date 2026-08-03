@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 func Test_cp(t *testing.T) {
@@ -135,9 +137,9 @@ func Test_cp_recursiveContinuesPastDeniedEntries(t *testing.T) {
 	env.Args = []string{"-r", "/work/src", "/work/dst"}
 	err := cp(context.Background(), env)
 
-	var ee exitError
+	var ee *command.ExitError
 	require.ErrorAs(t, err, &ee)
-	assert.Equal(t, 1, ee.code)
+	assert.Equal(t, 1, ee.Code)
 	assert.Contains(t, stderr.String(), "cp:")
 	assert.Contains(t, stderr.String(), "permission denied")
 

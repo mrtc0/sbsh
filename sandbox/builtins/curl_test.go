@@ -11,6 +11,8 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // capturedRequest is what the test server saw, so that the tests can assert on
@@ -116,9 +118,9 @@ func Test_curl(t *testing.T) {
 			err := curl(context.Background(), env)
 
 			if tc.wantExit != 0 {
-				var ee exitError
+				var ee *command.ExitError
 				require.ErrorAs(t, err, &ee)
-				assert.Equal(t, tc.wantExit, ee.code, "exit code")
+				assert.Equal(t, tc.wantExit, ee.Code, "exit code")
 			} else {
 				require.NoError(t, err)
 			}

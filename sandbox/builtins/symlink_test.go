@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 // The recursive commands share one rule: a symbolic link found while walking is an
@@ -142,7 +144,7 @@ func TestCp_ReportsSymlinkItCannotCopy(t *testing.T) {
 	env.Args = []string{"-r", "/work/sub", "/work/dst2"}
 	err := cp(ctx, env)
 	require.Error(t, err)
-	assert.Equal(t, exitError{code: 1}, err)
+	assert.Equal(t, &command.ExitError{Code: 1}, err)
 	assert.Contains(t, stderr.String(), "cp: /work/sub/blink: symbolic link not copied")
 	assert.FileExists(t, filepath.Join(hostDir, "dst2/b.txt"), "the rest of the tree is copied")
 	assert.NoFileExists(t, filepath.Join(hostDir, "dst2/blink"))
@@ -187,7 +189,7 @@ func TestTar_ReportsSymlinkItCannotStore(t *testing.T) {
 	env.Args = []string{"-cf", "/work/a.tar", "sub", "dirlink"}
 	err := tarCommand(context.Background(), env)
 	require.Error(t, err)
-	assert.Equal(t, exitError{code: 2}, err)
+	assert.Equal(t, &command.ExitError{Code: 2}, err)
 	assert.Contains(t, stderr.String(), "tar: /work/dirlink: symbolic link not archived")
 	assert.FileExists(t, filepath.Join(hostDir, "a.tar"))
 

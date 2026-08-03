@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 func Test_rm(t *testing.T) {
@@ -145,9 +147,9 @@ func Test_rm_recursiveContinuesPastDeniedEntries(t *testing.T) {
 				require.NoError(t, err)
 				assert.Empty(t, stderr.String())
 			} else {
-				var ee exitError
+				var ee *command.ExitError
 				require.ErrorAs(t, err, &ee)
-				assert.Equal(t, tc.wantExit, ee.code)
+				assert.Equal(t, tc.wantExit, ee.Code)
 				assert.Contains(t, stderr.String(), tc.wantWarning)
 				assert.Contains(t, stderr.String(), "rm:")
 			}

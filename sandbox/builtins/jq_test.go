@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 func Test_jq(t *testing.T) {
@@ -132,9 +134,9 @@ func Test_jq_exitStatus(t *testing.T) {
 				require.NoError(t, err)
 				return
 			}
-			var ee exitError
+			var ee *command.ExitError
 			require.ErrorAs(t, err, &ee)
-			assert.Equal(t, tc.code, uint8(ee.code))
+			assert.Equal(t, tc.code, uint8(ee.Code))
 		})
 	}
 }
