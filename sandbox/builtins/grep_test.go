@@ -128,7 +128,7 @@ func Test_grep(t *testing.T) {
 				mustWrite(t, env.FS, path, body)
 			}
 			if tc.seed == nil {
-				env.HC.Stdin = strings.NewReader(tc.stdin)
+				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
 			err := grep(context.Background(), env, tc.args)

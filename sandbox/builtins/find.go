@@ -65,7 +65,7 @@ func find(_ context.Context, env *Env, args []string) error {
 					return nil
 				}
 			}
-			fmt.Fprintln(env.HC.Stdout, walkedName(root, abs, p))
+			fmt.Fprintln(env.Stdout, walkedName(root, abs, p))
 			return nil
 		}))
 		if err != nil {

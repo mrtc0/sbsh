@@ -81,7 +81,7 @@ func sortCommand(_ context.Context, env *Env, args []string) error {
 	}
 
 	for _, l := range lines {
-		fmt.Fprintln(env.HC.Stdout, l)
+		fmt.Fprintln(env.Stdout, l)
 	}
 	return nil
 }

@@ -78,7 +78,7 @@ func Test_jq(t *testing.T) {
 				mustWrite(t, env.FS, path, body)
 			}
 			if tc.seed == nil {
-				env.HC.Stdin = strings.NewReader(tc.stdin)
+				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
 			require.NoError(t, jqCommand(context.Background(), env, tc.args))
@@ -123,7 +123,7 @@ func Test_jq_exitStatus(t *testing.T) {
 			t.Parallel()
 
 			env, _, _ := NewTestEnv(t, "/work")
-			env.HC.Stdin = strings.NewReader(tc.stdin)
+			env.Stdin = strings.NewReader(tc.stdin)
 
 			err := jqCommand(context.Background(), env, tc.args)
 			if tc.ok {
@@ -149,7 +149,7 @@ func Test_jq_errors(t *testing.T) {
 	t.Run("invalid filter", func(t *testing.T) {
 		t.Parallel()
 		env, _, _ := NewTestEnv(t, "/work")
-		env.HC.Stdin = strings.NewReader(`{}`)
+		env.Stdin = strings.NewReader(`{}`)
 		require.Error(t, jqCommand(context.Background(), env, []string{".["}))
 	})
 }

@@ -74,7 +74,7 @@ func jqCommand(ctx context.Context, env *Env, args []string) error {
 			}
 			produced = true
 			lastOutput = v
-			if err := jqWrite(env.HC.Stdout, v, compact, raw); err != nil {
+			if err := jqWrite(env.Stdout, v, compact, raw); err != nil {
 				return err
 			}
 		}

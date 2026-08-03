@@ -23,9 +23,9 @@ func head(_ context.Context, env *Env, args []string) error {
 		}
 		if len(files) > 1 {
 			if idx > 0 {
-				fmt.Fprintln(env.HC.Stdout)
+				fmt.Fprintln(env.Stdout)
 			}
-			fmt.Fprintf(env.HC.Stdout, "==> %s <==\n", f)
+			fmt.Fprintf(env.Stdout, "==> %s <==\n", f)
 		}
 		lines := splitLines(b)
 		limit := n
@@ -40,7 +40,7 @@ func head(_ context.Context, env *Env, args []string) error {
 			limit = len(lines)
 		}
 		for _, l := range lines[:limit] {
-			fmt.Fprintln(env.HC.Stdout, l)
+			fmt.Fprintln(env.Stdout, l)
 		}
 	}
 	return nil

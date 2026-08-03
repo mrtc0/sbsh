@@ -91,13 +91,13 @@ func curl(ctx context.Context, env *Env, args []string) error {
 	defer res.Body.Close()
 
 	if *fail && res.StatusCode >= http.StatusBadRequest {
-		fmt.Fprintf(env.HC.Stderr, "curl: the requested URL returned error: %s\n", res.Status)
+		fmt.Fprintf(env.Stderr, "curl: the requested URL returned error: %s\n", res.Status)
 		return exit(curlFailExit)
 	}
 
 	withHeaders := *include || *head
 	if *output == "" {
-		return writeResponse(env.HC.Stdout, res, withHeaders)
+		return writeResponse(env.Stdout, res, withHeaders)
 	}
 
 	f, err := env.FS.OpenFile(env.Abs(*output), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)

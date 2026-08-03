@@ -64,7 +64,7 @@ func Test_tail(t *testing.T) {
 				mustWrite(t, env.FS, "/work/f", tc.seed)
 			}
 			if tc.stdin != "" {
-				env.HC.Stdin = strings.NewReader(tc.stdin)
+				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
 			require.NoError(t, tail(context.Background(), env, tc.args))

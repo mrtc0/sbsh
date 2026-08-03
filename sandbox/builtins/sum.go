@@ -31,7 +31,7 @@ func hashFiles(env *Env, args []string, newHash func() hash.Hash) error {
 		if name == "" {
 			name = "-"
 		}
-		fmt.Fprintf(env.HC.Stdout, "%x  %s\n", h.Sum(nil), name)
+		fmt.Fprintf(env.Stdout, "%x  %s\n", h.Sum(nil), name)
 	}
 	return nil
 }

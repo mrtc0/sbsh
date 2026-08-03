@@ -53,9 +53,9 @@ func uniqCommand(_ context.Context, env *Env, args []string) error {
 		case *onlyDup && n < 2:
 		case *onlyUniq && n > 1:
 		case *count:
-			fmt.Fprintf(env.HC.Stdout, "%7d %s\n", n, lines[i])
+			fmt.Fprintf(env.Stdout, "%7d %s\n", n, lines[i])
 		default:
-			fmt.Fprintln(env.HC.Stdout, lines[i])
+			fmt.Fprintln(env.Stdout, lines[i])
 		}
 		i = j
 	}

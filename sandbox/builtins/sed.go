@@ -109,7 +109,7 @@ func sedCommand(_ context.Context, env *Env, args []string) error {
 		if err != nil {
 			return err
 		}
-		_, err = io.WriteString(env.HC.Stdout, res)
+		_, err = io.WriteString(env.Stdout, res)
 		return err
 	}
 
@@ -133,7 +133,7 @@ func sedCommand(_ context.Context, env *Env, args []string) error {
 			}
 			continue
 		}
-		if _, err := io.WriteString(env.HC.Stdout, res); err != nil {
+		if _, err := io.WriteString(env.Stdout, res); err != nil {
 			return err
 		}
 	}

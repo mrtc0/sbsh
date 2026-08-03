@@ -50,13 +50,13 @@ func base64Command(_ context.Context, env *Env, args []string) error {
 		if err != nil {
 			return fmt.Errorf("invalid input: %w", err)
 		}
-		_, err = env.HC.Stdout.Write(out)
+		_, err = env.Stdout.Write(out)
 		return err
 	}
 
 	encoded := base64.StdEncoding.EncodeToString(b)
 	if wrap <= 0 {
-		_, err := fmt.Fprintln(env.HC.Stdout, encoded)
+		_, err := fmt.Fprintln(env.Stdout, encoded)
 		return err
 	}
 	for i := 0; i < len(encoded); i += wrap {
@@ -64,7 +64,7 @@ func base64Command(_ context.Context, env *Env, args []string) error {
 		if end > len(encoded) {
 			end = len(encoded)
 		}
-		if _, err := fmt.Fprintln(env.HC.Stdout, encoded[i:end]); err != nil {
+		if _, err := fmt.Fprintln(env.Stdout, encoded[i:end]); err != nil {
 			return err
 		}
 	}

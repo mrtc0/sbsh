@@ -255,10 +255,10 @@ func parseLineCount(args []string, def int) (n int, files []string, err error) {
 // stdin (empty if Stdin is nil).
 func readSource(env *Env, path string) ([]byte, error) {
 	if path == "" || path == "-" {
-		if env.HC.Stdin == nil {
+		if env.Stdin == nil {
 			return nil, nil
 		}
-		return io.ReadAll(env.HC.Stdin)
+		return io.ReadAll(env.Stdin)
 	}
 	return afero.ReadFile(env.FS, env.Abs(path))
 }

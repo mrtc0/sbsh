@@ -40,7 +40,7 @@ func Test_checksums(t *testing.T) {
 		t.Run(name+" reads stdin as -", func(t *testing.T) {
 			t.Parallel()
 			env, stdout, _ := NewTestEnv(t, "/work")
-			env.HC.Stdin = strings.NewReader("abc")
+			env.Stdin = strings.NewReader("abc")
 			require.NoError(t, tc.fn(context.Background(), env, nil))
 			assert.Equal(t, tc.want+"  -\n", stdout.String())
 		})

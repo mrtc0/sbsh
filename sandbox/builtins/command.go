@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"path"
 
@@ -21,11 +22,19 @@ type Env struct {
 	// the error ExecMiddleware reports on its behalf.
 	Name string
 
+	// Dir is the shell's current working directory, as an absolute path in the
+	// sandbox filesystem. Abs resolves an argument against it.
+	Dir string
+
+	// Stdin, Stdout and Stderr are the command's standard streams, as the shell
+	// wired them up: a pipe, a redirected file in the sandbox filesystem, or the
+	// sandbox's captured output.
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+
 	// FS is the sandbox's mount-resolved filesystem. It implements afero.Fs.
 	FS vfs.FS
-	// HC is the handler context from mvdan/sh interp,
-	// which provides access to stdin, stdout, stderr, and the current working directory.
-	HC interp.HandlerContext
 
 	// HTTP reaches the network within the limits of the sandbox's network
 	// policy. It is nil when no policy was configured, and a command that finds
@@ -81,7 +90,7 @@ func (s shellEnviron) All() []string {
 
 func (e *Env) Abs(p string) string {
 	if !path.IsAbs(p) {
-		p = path.Join(e.HC.Dir, p)
+		p = path.Join(e.Dir, p)
 	}
 	return vfs.Normalize(p)
 }
@@ -125,7 +134,19 @@ func ExecMiddleware(fsys vfs.FS, opts Options) func(next interp.ExecHandlerFunc)
 				return interp.ExitStatus(127)
 			}
 
-			env := &Env{Name: args[0], FS: fsys, HC: hc, HTTP: opts.HTTP, Python: opts.Python, Env: NewEnviron(hc.Env)}
+			// The one place the shell's handler context is unpacked: the payload a
+			// command receives carries no type from the shell backend.
+			env := &Env{
+				Name:   args[0],
+				Dir:    hc.Dir,
+				Stdin:  hc.Stdin,
+				Stdout: hc.Stdout,
+				Stderr: hc.Stderr,
+				FS:     fsys,
+				HTTP:   opts.HTTP,
+				Python: opts.Python,
+				Env:    NewEnviron(hc.Env),
+			}
 			if err := fn(ctx, env, args[1:]); err != nil {
 				// The single seam between a builtin's int exit code and the
 				// shell backend's representation. interp.ExitStatus is a uint8,

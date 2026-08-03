@@ -80,7 +80,7 @@ func Test_awk(t *testing.T) {
 				mustWrite(t, env.FS, path, body)
 			}
 			if tc.seed == nil {
-				env.HC.Stdin = strings.NewReader(tc.stdin)
+				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
 			require.NoError(t, awkCommand(context.Background(), env, tc.args))
@@ -94,7 +94,7 @@ func Test_awk_program_from_file(t *testing.T) {
 
 	env, stdout, _ := NewTestEnv(t, "/work")
 	mustWrite(t, env.FS, "/work/prog.awk", "{print $1 + $2}\n")
-	env.HC.Stdin = strings.NewReader("2 3\n10 20\n")
+	env.Stdin = strings.NewReader("2 3\n10 20\n")
 
 	require.NoError(t, awkCommand(context.Background(), env, []string{"-f", "prog.awk"}))
 	assert.Equal(t, "5\n30\n", stdout.String())
@@ -104,7 +104,7 @@ func Test_awk_exitStatus(t *testing.T) {
 	t.Parallel()
 
 	env, _, _ := NewTestEnv(t, "/work")
-	env.HC.Stdin = strings.NewReader("")
+	env.Stdin = strings.NewReader("")
 
 	err := awkCommand(context.Background(), env, []string{"BEGIN{exit 3}"})
 	var ee exitError
@@ -128,7 +128,7 @@ func Test_awk_sandboxed(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			env, _, _ := NewTestEnv(t, "/work")
-			env.HC.Stdin = strings.NewReader("")
+			env.Stdin = strings.NewReader("")
 			require.Error(t, awkCommand(context.Background(), env, []string{prog}))
 		})
 	}
@@ -140,7 +140,7 @@ func Test_awk_contextCancel(t *testing.T) {
 	t.Parallel()
 
 	env, _, _ := NewTestEnv(t, "/work")
-	env.HC.Stdin = strings.NewReader("")
+	env.Stdin = strings.NewReader("")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
