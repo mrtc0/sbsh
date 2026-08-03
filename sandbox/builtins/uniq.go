@@ -12,13 +12,13 @@ import (
 //
 //	-c prefix counts / -d only duplicated lines / -u only unique lines / -i ignore case
 //	uniq [-cdui] [file]
-func uniqCommand(_ context.Context, env *Env, args []string) error {
+func uniqCommand(_ context.Context, env *Env) error {
 	fs := NewFlagSet()
 	count := fs.Bool("-c")
 	onlyDup := fs.Bool("-d")
 	onlyUniq := fs.Bool("-u")
 	fold := fs.Bool("-i")
-	files, err := fs.Parse(args)
+	files, err := fs.Parse(env.Args)
 	if err != nil {
 		return err
 	}

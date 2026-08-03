@@ -14,20 +14,20 @@ import (
 // pythonCommand is the implementation of the "python" command in the sandbox.
 // It supports running Python code from a string or a file,
 // and it sets up the environment for the Python interpreter.
-func pythonCommand(ctx context.Context, env *Env, args []string) error {
+func pythonCommand(ctx context.Context, env *Env) error {
 	var code string
 	var argv []string
 	switch {
-	case len(args) >= 2 && args[0] == "-c":
-		code = args[1]
-		argv = append([]string{"-c"}, args[2:]...)
-	case len(args) >= 1 && !strings.HasPrefix(args[0], "-"):
-		data, err := afero.ReadFile(env.FS, env.Abs(args[0]))
+	case len(env.Args) >= 2 && env.Args[0] == "-c":
+		code = env.Args[1]
+		argv = append([]string{"-c"}, env.Args[2:]...)
+	case len(env.Args) >= 1 && !strings.HasPrefix(env.Args[0], "-"):
+		data, err := afero.ReadFile(env.FS, env.Abs(env.Args[0]))
 		if err != nil {
 			return err
 		}
 		code = string(data)
-		argv = args
+		argv = env.Args
 	default:
 		return fmt.Errorf("usage: python -c CODE [args...] | python FILE [args...]")
 	}

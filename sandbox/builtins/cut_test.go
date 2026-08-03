@@ -98,7 +98,8 @@ func Test_cut(t *testing.T) {
 				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			err := cut(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := cut(context.Background(), env)
 			if tc.wantErr {
 				require.Error(t, err)
 				return

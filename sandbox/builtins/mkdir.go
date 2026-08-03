@@ -6,10 +6,10 @@ import (
 )
 
 // mkdir creates directories. -p creates parent directories too and does not error if they exist.
-func mkdir(_ context.Context, env *Env, args []string) error {
+func mkdir(_ context.Context, env *Env) error {
 	fs := NewFlagSet()
 	parents := fs.Bool("-p")
-	paths, err := fs.Parse(args)
+	paths, err := fs.Parse(env.Args)
 	if err != nil {
 		return err
 	}

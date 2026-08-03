@@ -23,7 +23,7 @@ import (
 //	tar -c[z]f archive file...
 //	tar -x[z]f archive [-C dir]
 //	tar -t[z]f archive
-func tarCommand(_ context.Context, env *Env, args []string) error {
+func tarCommand(_ context.Context, env *Env) error {
 	fs := NewFlagSet()
 	create := fs.Bool("-c")
 	extract := fs.Bool("-x")
@@ -32,7 +32,7 @@ func tarCommand(_ context.Context, env *Env, args []string) error {
 	verboseFlag := fs.Bool("-v")
 	archiveFlag := fs.String("", "-f")
 	changeDirFlag := fs.String("", "-C")
-	files, err := fs.Parse(args)
+	files, err := fs.Parse(env.Args)
 	if err != nil {
 		return err
 	}

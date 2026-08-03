@@ -17,12 +17,12 @@ import (
 //
 //	-c write to stdout and keep inputs / -d decompress / -k keep input files
 //	gzip [-cdk] [file...]
-func gzipCommand(_ context.Context, env *Env, args []string) error {
+func gzipCommand(_ context.Context, env *Env) error {
 	fs := NewFlagSet()
 	decompress := fs.Bool("-d", "--decompress")
 	stdout := fs.Bool("-c", "--stdout")
 	keepFlag := fs.Bool("-k", "--keep")
-	files, err := fs.Parse(args)
+	files, err := fs.Parse(env.Args)
 	if err != nil {
 		return err
 	}
@@ -73,11 +73,11 @@ func gzipCommand(_ context.Context, env *Env, args []string) error {
 // the archive unless -k or -c is given.
 //
 //	gunzip [-ck] [file...]
-func gunzipCommand(_ context.Context, env *Env, args []string) error {
+func gunzipCommand(_ context.Context, env *Env) error {
 	fs := NewFlagSet()
 	stdout := fs.Bool("-c", "--stdout")
 	keep := fs.Bool("-k", "--keep")
-	files, err := fs.Parse(args)
+	files, err := fs.Parse(env.Args)
 	if err != nil {
 		return err
 	}
@@ -87,8 +87,8 @@ func gunzipCommand(_ context.Context, env *Env, args []string) error {
 // zcatCommand decompresses gzip files to stdout, always keeping the inputs.
 //
 //	zcat [file...]
-func zcatCommand(_ context.Context, env *Env, args []string) error {
-	files, err := NewFlagSet().Parse(args)
+func zcatCommand(_ context.Context, env *Env) error {
+	files, err := NewFlagSet().Parse(env.Args)
 	if err != nil {
 		return err
 	}

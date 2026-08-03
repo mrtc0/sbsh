@@ -17,7 +17,7 @@ import (
 //	-E interpret the pattern as an extended regular expression (accepted for
 //	   compatibility; the pattern is always parsed as RE2, which is ERE-compatible)
 //	grep [-cEilnrv] pattern [file...]
-func grep(_ context.Context, env *Env, args []string) error {
+func grep(_ context.Context, env *Env) error {
 	fs := NewFlagSet()
 	ignoreCase := fs.Bool("-i")
 	lineNum := fs.Bool("-n")
@@ -27,7 +27,7 @@ func grep(_ context.Context, env *Env, args []string) error {
 	listFlag := fs.Bool("-l")
 	_ = fs.Bool("-E") // ERE-compatible already; accepted for compatibility
 
-	rest, err := fs.Parse(args)
+	rest, err := fs.Parse(env.Args)
 	if err != nil {
 		return err
 	}

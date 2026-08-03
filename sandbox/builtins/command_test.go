@@ -101,34 +101,34 @@ func installTestCommands(t *testing.T) {
 	registry = replacement
 	t.Cleanup(func() { registry = saved })
 
-	replacement["test_echo"] = func(_ context.Context, env *Env, args []string) error {
-		fmt.Fprintln(env.Stdout, strings.Join(args, " "))
+	replacement["test_echo"] = func(_ context.Context, env *Env) error {
+		fmt.Fprintln(env.Stdout, strings.Join(env.Args, " "))
 		return nil
 	}
 
-	replacement["test_fail"] = func(_ context.Context, _ *Env, _ []string) error {
+	replacement["test_fail"] = func(_ context.Context, _ *Env) error {
 		return errors.New("boom")
 	}
 
-	replacement["test_exit"] = func(_ context.Context, _ *Env, _ []string) error {
+	replacement["test_exit"] = func(_ context.Context, _ *Env) error {
 		return exit(3)
 	}
 
-	replacement["test_exit_big"] = func(_ context.Context, _ *Env, _ []string) error {
+	replacement["test_exit_big"] = func(_ context.Context, _ *Env) error {
 		return exit(300)
 	}
 
-	replacement["test_exit_native"] = func(_ context.Context, _ *Env, _ []string) error {
+	replacement["test_exit_native"] = func(_ context.Context, _ *Env) error {
 		return interp.ExitStatus(3)
 	}
 
-	replacement["test_dir"] = func(_ context.Context, env *Env, _ []string) error {
+	replacement["test_dir"] = func(_ context.Context, env *Env) error {
 		fmt.Fprintln(env.Stdout, env.Dir)
 		return nil
 	}
 
-	replacement["test_cat"] = func(_ context.Context, env *Env, args []string) error {
-		b, err := afero.ReadFile(env.FS, args[0])
+	replacement["test_cat"] = func(_ context.Context, env *Env) error {
+		b, err := afero.ReadFile(env.FS, env.Args[0])
 		if err != nil {
 			return err
 		}
@@ -136,7 +136,7 @@ func installTestCommands(t *testing.T) {
 		return nil
 	}
 
-	replacement["test_net"] = func(_ context.Context, env *Env, _ []string) error {
+	replacement["test_net"] = func(_ context.Context, env *Env) error {
 		if env.HTTP == nil {
 			fmt.Fprintln(env.Stdout, "nil")
 			return nil

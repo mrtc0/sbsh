@@ -17,7 +17,8 @@ func Test_diff(t *testing.T) {
 		mustWrite(t, env.FS, "/work/a", "same\n")
 		mustWrite(t, env.FS, "/work/b", "same\n")
 
-		require.NoError(t, diffCommand(context.Background(), env, []string{"a", "b"}))
+		env.Args = []string{"a", "b"}
+		require.NoError(t, diffCommand(context.Background(), env))
 		assert.Empty(t, stdout.String())
 	})
 
@@ -27,7 +28,8 @@ func Test_diff(t *testing.T) {
 		mustWrite(t, env.FS, "/work/a", "line1\nline2\nline3\n")
 		mustWrite(t, env.FS, "/work/b", "line1\nCHANGED\nline3\n")
 
-		err := diffCommand(context.Background(), env, []string{"a", "b"})
+		env.Args = []string{"a", "b"}
+		err := diffCommand(context.Background(), env)
 		var ee exitError
 		require.ErrorAs(t, err, &ee)
 		assert.Equal(t, 1, ee.code)

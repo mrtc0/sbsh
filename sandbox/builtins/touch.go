@@ -7,8 +7,8 @@ import (
 )
 
 // touch creates an empty file if it does not exist, or updates its modification time to now.
-func touch(_ context.Context, env *Env, args []string) error {
-	paths, err := NewFlagSet().Parse(args)
+func touch(_ context.Context, env *Env) error {
+	paths, err := NewFlagSet().Parse(env.Args)
 	if err != nil {
 		return err
 	}

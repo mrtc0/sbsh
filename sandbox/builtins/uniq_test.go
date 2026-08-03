@@ -54,7 +54,8 @@ func Test_uniq(t *testing.T) {
 			env, stdout, _ := NewTestEnv(t, "/work")
 			env.Stdin = strings.NewReader(tc.stdin)
 
-			require.NoError(t, uniqCommand(context.Background(), env, tc.args))
+			env.Args = tc.args
+			require.NoError(t, uniqCommand(context.Background(), env))
 			assert.Equal(t, tc.want, stdout.String())
 		})
 	}

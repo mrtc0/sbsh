@@ -13,11 +13,11 @@ import (
 //
 //	-d decode / -w N wrap encoded output at N columns (0 disables wrapping)
 //	base64 [-d] [-w N] [file]
-func base64Command(_ context.Context, env *Env, args []string) error {
+func base64Command(_ context.Context, env *Env) error {
 	fs := NewFlagSet()
 	decodeFlag := fs.Bool("-d", "--decode")
 	wrapFlag := fs.String("76", "-w", "--wrap")
-	files, err := fs.Parse(args)
+	files, err := fs.Parse(env.Args)
 	if err != nil {
 		return err
 	}

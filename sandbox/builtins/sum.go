@@ -12,8 +12,8 @@ import (
 // hashFiles computes a checksum over each input using newHash and prints it in
 // the GNU coreutils format "<hex>  <name>". With no files it reads stdin and
 // reports the name "-".
-func hashFiles(env *Env, args []string, newHash func() hash.Hash) error {
-	files, err := NewFlagSet().Parse(args)
+func hashFiles(env *Env, newHash func() hash.Hash) error {
+	files, err := NewFlagSet().Parse(env.Args)
 	if err != nil {
 		return err
 	}
@@ -36,16 +36,16 @@ func hashFiles(env *Env, args []string, newHash func() hash.Hash) error {
 	return nil
 }
 
-func md5sum(_ context.Context, env *Env, args []string) error {
-	return hashFiles(env, args, func() hash.Hash { return md5.New() })
+func md5sum(_ context.Context, env *Env) error {
+	return hashFiles(env, func() hash.Hash { return md5.New() })
 }
 
-func sha1sum(_ context.Context, env *Env, args []string) error {
-	return hashFiles(env, args, func() hash.Hash { return sha1.New() })
+func sha1sum(_ context.Context, env *Env) error {
+	return hashFiles(env, func() hash.Hash { return sha1.New() })
 }
 
-func sha256sum(_ context.Context, env *Env, args []string) error {
-	return hashFiles(env, args, func() hash.Hash { return sha256.New() })
+func sha256sum(_ context.Context, env *Env) error {
+	return hashFiles(env, func() hash.Hash { return sha256.New() })
 }
 
 func init() {

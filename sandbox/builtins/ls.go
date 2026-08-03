@@ -8,10 +8,10 @@ import (
 	"github.com/spf13/afero"
 )
 
-func ls(_ context.Context, env *Env, args []string) error {
+func ls(_ context.Context, env *Env) error {
 	fs := NewFlagSet()
 	long := fs.Bool("-l")
-	paths, err := fs.Parse(args)
+	paths, err := fs.Parse(env.Args)
 	if err != nil {
 		return err
 	}

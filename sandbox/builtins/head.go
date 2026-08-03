@@ -8,8 +8,8 @@ import (
 // head prints the first n lines (default 10) of each input. A negative n prints
 // all but the last |n| lines, as GNU head does. With no arguments it reads
 // stdin. For multiple files it prefixes each with a "==> name <==" header.
-func head(_ context.Context, env *Env, args []string) error {
-	n, files, err := parseLineCount(args, 10)
+func head(_ context.Context, env *Env) error {
+	n, files, err := parseLineCount(env.Args, 10)
 	if err != nil {
 		return err
 	}

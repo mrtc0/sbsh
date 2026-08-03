@@ -52,7 +52,8 @@ func Test_base64(t *testing.T) {
 				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			require.NoError(t, base64Command(context.Background(), env, tc.args))
+			env.Args = tc.args
+			require.NoError(t, base64Command(context.Background(), env))
 			assert.Equal(t, tc.want, stdout.String())
 		})
 	}
@@ -64,7 +65,8 @@ func Test_base64_wrap(t *testing.T) {
 	// 60 input bytes encode to 80 base64 characters, which wraps after 76.
 	env, stdout, _ := NewTestEnv(t, "/work")
 	env.Stdin = strings.NewReader(strings.Repeat("a", 60))
-	require.NoError(t, base64Command(context.Background(), env, nil))
+	env.Args = nil
+	require.NoError(t, base64Command(context.Background(), env))
 
 	out := stdout.String()
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
@@ -74,7 +76,8 @@ func Test_base64_wrap(t *testing.T) {
 	// The wrapped output round-trips back to the original when decoded.
 	env2, stdout2, _ := NewTestEnv(t, "/work")
 	env2.Stdin = strings.NewReader(out)
-	require.NoError(t, base64Command(context.Background(), env2, []string{"-d"}))
+	env2.Args = []string{"-d"}
+	require.NoError(t, base64Command(context.Background(), env2))
 	assert.Equal(t, strings.Repeat("a", 60), stdout2.String())
 }
 
@@ -83,7 +86,8 @@ func Test_base64_noWrap(t *testing.T) {
 
 	env, stdout, _ := NewTestEnv(t, "/work")
 	env.Stdin = strings.NewReader(strings.Repeat("a", 60))
-	require.NoError(t, base64Command(context.Background(), env, []string{"-w", "0"}))
+	env.Args = []string{"-w", "0"}
+	require.NoError(t, base64Command(context.Background(), env))
 
 	out := strings.TrimRight(stdout.String(), "\n")
 	assert.NotContains(t, out, "\n")
@@ -95,5 +99,6 @@ func Test_base64_invalidDecode(t *testing.T) {
 
 	env, _, _ := NewTestEnv(t, "/work")
 	env.Stdin = strings.NewReader("!!!not-base64!!!")
-	require.Error(t, base64Command(context.Background(), env, []string{"-d"}))
+	env.Args = []string{"-d"}
+	require.Error(t, base64Command(context.Background(), env))
 }

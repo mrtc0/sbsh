@@ -12,8 +12,8 @@ import (
 //
 //	mv source dest
 //	mv source... directory
-func mv(_ context.Context, env *Env, args []string) error {
-	rest, err := NewFlagSet().Parse(args)
+func mv(_ context.Context, env *Env) error {
+	rest, err := NewFlagSet().Parse(env.Args)
 	if err != nil {
 		return err
 	}

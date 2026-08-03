@@ -131,7 +131,8 @@ func Test_grep(t *testing.T) {
 				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			err := grep(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := grep(context.Background(), env)
 
 			switch {
 			case tc.wantErr:
@@ -197,7 +198,8 @@ func Test_grep_recursiveContinuesPastDeniedEntries(t *testing.T) {
 				mustWrite(t, base, path, body)
 			}
 
-			err := grep(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := grep(context.Background(), env)
 
 			var ee exitError
 			require.ErrorAs(t, err, &ee)

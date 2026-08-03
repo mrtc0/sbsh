@@ -9,10 +9,10 @@ import (
 //
 //	-a append to the files instead of truncating them
 //	tee [-a] file...
-func tee(_ context.Context, env *Env, args []string) error {
+func tee(_ context.Context, env *Env) error {
 	fs := NewFlagSet()
 	appendMode := fs.Bool("-a", "--append")
-	files, err := fs.Parse(args)
+	files, err := fs.Parse(env.Args)
 	if err != nil {
 		return err
 	}

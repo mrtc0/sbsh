@@ -83,7 +83,8 @@ func Test_awk(t *testing.T) {
 				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			require.NoError(t, awkCommand(context.Background(), env, tc.args))
+			env.Args = tc.args
+			require.NoError(t, awkCommand(context.Background(), env))
 			assert.Equal(t, tc.want, stdout.String())
 		})
 	}
@@ -96,7 +97,8 @@ func Test_awk_program_from_file(t *testing.T) {
 	mustWrite(t, env.FS, "/work/prog.awk", "{print $1 + $2}\n")
 	env.Stdin = strings.NewReader("2 3\n10 20\n")
 
-	require.NoError(t, awkCommand(context.Background(), env, []string{"-f", "prog.awk"}))
+	env.Args = []string{"-f", "prog.awk"}
+	require.NoError(t, awkCommand(context.Background(), env))
 	assert.Equal(t, "5\n30\n", stdout.String())
 }
 
@@ -106,7 +108,8 @@ func Test_awk_exitStatus(t *testing.T) {
 	env, _, _ := NewTestEnv(t, "/work")
 	env.Stdin = strings.NewReader("")
 
-	err := awkCommand(context.Background(), env, []string{"BEGIN{exit 3}"})
+	env.Args = []string{"BEGIN{exit 3}"}
+	err := awkCommand(context.Background(), env)
 	var ee exitError
 	require.ErrorAs(t, err, &ee)
 	assert.Equal(t, 3, ee.code)
@@ -129,7 +132,8 @@ func Test_awk_sandboxed(t *testing.T) {
 			t.Parallel()
 			env, _, _ := NewTestEnv(t, "/work")
 			env.Stdin = strings.NewReader("")
-			require.Error(t, awkCommand(context.Background(), env, []string{prog}))
+			env.Args = []string{prog}
+			require.Error(t, awkCommand(context.Background(), env))
 		})
 	}
 }
@@ -145,9 +149,10 @@ func Test_awk_contextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
+	env.Args = []string{"BEGIN{x=0; while (1) x++}"}
 	done := make(chan error, 1)
 	go func() {
-		done <- awkCommand(ctx, env, []string{"BEGIN{x=0; while (1) x++}"})
+		done <- awkCommand(ctx, env)
 	}()
 
 	select {

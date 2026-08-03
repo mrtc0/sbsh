@@ -32,7 +32,7 @@ const curlFailExit = 22
 // Every request goes through the client the sandbox's network policy built. A
 // sandbox configured without a policy has no client, and curl says so rather
 // than reaching the network by some other route.
-func curl(ctx context.Context, env *Env, args []string) error {
+func curl(ctx context.Context, env *Env) error {
 	fs := NewFlagSet()
 	method := fs.String("", "-X", "--request")
 	headers := fs.StringList("-H", "--header")
@@ -44,7 +44,7 @@ func curl(ctx context.Context, env *Env, args []string) error {
 	fail := fs.Bool("-f", "--fail")
 	fs.Bool("-s", "--silent")
 
-	operands, err := fs.Parse(args)
+	operands, err := fs.Parse(env.Args)
 	if err != nil {
 		return err
 	}

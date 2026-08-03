@@ -52,7 +52,8 @@ func Test_cat(t *testing.T) {
 				env.Stdin = strings.NewReader(tc.stdin)
 			}
 
-			err := cat(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := cat(context.Background(), env)
 			if tc.wantErr {
 				require.Error(t, err)
 				return

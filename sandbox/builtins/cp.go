@@ -15,10 +15,10 @@ import (
 //
 //	cp [-r] source dest
 //	cp [-r] source... directory
-func cp(_ context.Context, env *Env, args []string) error {
+func cp(_ context.Context, env *Env) error {
 	fs := NewFlagSet()
 	recursive := fs.Bool("-r", "-R")
-	rest, err := fs.Parse(args)
+	rest, err := fs.Parse(env.Args)
 	if err != nil {
 		return err
 	}

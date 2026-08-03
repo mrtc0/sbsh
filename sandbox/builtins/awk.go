@@ -22,13 +22,13 @@ import (
 //
 //	awk [-F fs] [-v var=value]... 'program' [file...]
 //	awk [-F fs] [-v var=value]... -f progfile... [file...]
-func awkCommand(ctx context.Context, env *Env, args []string) error {
+func awkCommand(ctx context.Context, env *Env) error {
 	// awk options must precede the program, so stop scanning at the first operand.
 	fs := NewFlagSet().StopAtFirstOperand()
 	fieldSepFlag := fs.String("", "-F")
 	varFlags := fs.StringList("-v")
 	progFileFlags := fs.StringList("-f")
-	rest, err := fs.Parse(args)
+	rest, err := fs.Parse(env.Args)
 	if err != nil {
 		return err
 	}

@@ -22,6 +22,9 @@ type Env struct {
 	// the error ExecMiddleware reports on its behalf.
 	Name string
 
+	// Args are the arguments the command was invoked with, without the name.
+	Args []string
+
 	// Dir is the shell's current working directory, as an absolute path in the
 	// sandbox filesystem. Abs resolves an argument against it.
 	Dir string
@@ -95,8 +98,9 @@ func (e *Env) Abs(p string) string {
 	return vfs.Normalize(p)
 }
 
-// Func is the type of a command implementation. It takes a context, an environment, and a slice of arguments.
-type Func func(ctx context.Context, env *Env, args []string) error
+// Func is the type of a command implementation. Everything the command is given
+// for one call is in the Env, so a caller needs to hold nothing beside it.
+type Func func(ctx context.Context, env *Env) error
 
 // exitError is how a builtin reports a non-zero exit code. Builtins return it
 // instead of interp.ExitStatus so they don't depend on the shell backend:
@@ -138,6 +142,7 @@ func ExecMiddleware(fsys vfs.FS, opts Options) func(next interp.ExecHandlerFunc)
 			// command receives carries no type from the shell backend.
 			env := &Env{
 				Name:   args[0],
+				Args:   args[1:],
 				Dir:    hc.Dir,
 				Stdin:  hc.Stdin,
 				Stdout: hc.Stdout,
@@ -147,7 +152,7 @@ func ExecMiddleware(fsys vfs.FS, opts Options) func(next interp.ExecHandlerFunc)
 				Python: opts.Python,
 				Env:    NewEnviron(hc.Env),
 			}
-			if err := fn(ctx, env, args[1:]); err != nil {
+			if err := fn(ctx, env); err != nil {
 				// The single seam between a builtin's int exit code and the
 				// shell backend's representation. interp.ExitStatus is a uint8,
 				// so the code is reduced modulo 256 here — matching how the OS

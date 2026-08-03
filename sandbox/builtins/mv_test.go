@@ -58,7 +58,8 @@ func Test_mv(t *testing.T) {
 				tc.setup(t, env)
 			}
 
-			err := mv(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := mv(context.Background(), env)
 			if tc.wantErr {
 				require.Error(t, err)
 				return

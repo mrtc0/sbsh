@@ -15,10 +15,10 @@ const diffContext = 3
 //	diff [-u] file1 file2
 //
 // Only the unified format is produced; -u is accepted for compatibility.
-func diffCommand(_ context.Context, env *Env, args []string) error {
+func diffCommand(_ context.Context, env *Env) error {
 	fs := NewFlagSet()
 	fs.Bool("-u") // unified format is the only output; accepted for compatibility
-	files, err := fs.Parse(args)
+	files, err := fs.Parse(env.Args)
 	if err != nil {
 		return err
 	}

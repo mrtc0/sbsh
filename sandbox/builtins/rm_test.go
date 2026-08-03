@@ -66,7 +66,8 @@ func Test_rm(t *testing.T) {
 				tc.setup(t, env)
 			}
 
-			err := rm(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := rm(context.Background(), env)
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -137,7 +138,8 @@ func Test_rm_recursiveContinuesPastDeniedEntries(t *testing.T) {
 				require.NoError(t, os.WriteFile(filepath.Join(hostDir, rel), []byte("x"), 0644))
 			}
 
-			err := rm(context.Background(), env, tc.args)
+			env.Args = tc.args
+			err := rm(context.Background(), env)
 
 			if tc.wantExit == 0 {
 				require.NoError(t, err)

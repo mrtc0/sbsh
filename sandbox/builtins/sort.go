@@ -13,13 +13,13 @@ import (
 //
 //	-r reverse / -n numeric / -u drop duplicate lines / -f fold case
 //	sort [-rnuf] [file...]
-func sortCommand(_ context.Context, env *Env, args []string) error {
+func sortCommand(_ context.Context, env *Env) error {
 	fs := NewFlagSet()
 	reverseFlag := fs.Bool("-r")
 	numericFlag := fs.Bool("-n")
 	uniqueFlag := fs.Bool("-u")
 	foldFlag := fs.Bool("-f")
-	files, err := fs.Parse(args)
+	files, err := fs.Parse(env.Args)
 	if err != nil {
 		return err
 	}
