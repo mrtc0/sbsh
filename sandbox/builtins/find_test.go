@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
 )
 
 func lines(s string) []string {
@@ -139,9 +141,9 @@ func Test_find_continuesPastDeniedEntries(t *testing.T) {
 			env.Args = tc.args
 			err := find(context.Background(), env)
 
-			var ee exitError
+			var ee *command.ExitError
 			require.ErrorAs(t, err, &ee)
-			assert.Equal(t, 1, ee.code)
+			assert.Equal(t, 1, ee.Code)
 			assert.Equal(t, tc.want, lines(stdout.String()))
 			assert.Contains(t, stderr.String(), "find:")
 			assert.Contains(t, stderr.String(), "permission denied")
