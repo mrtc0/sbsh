@@ -6,7 +6,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/mrtc0/sh/v3/expand"
 	"github.com/spf13/afero"
 
 	"github.com/mrtc0/sbsh/sandbox/python"
@@ -37,7 +36,7 @@ func pythonCommand(ctx context.Context, env *Env, args []string) error {
 		Code:  code,
 		Argv:  argv,
 		Cwd:   env.HC.Dir,
-		Env:   environList(env.HC.Env),
+		Env:   env.Env.All(),
 		Stdin: env.HC.Stdin,
 		FS:    env.FS,
 	})
@@ -60,17 +59,6 @@ func pythonCommand(ctx context.Context, env *Env, args []string) error {
 		return exit(int(res.ExitCode))
 	}
 	return nil
-}
-
-func environList(env expand.Environ) []string {
-	var out []string
-	env.Each(func(name string, vr expand.Variable) bool {
-		if vr.IsSet() && vr.Kind == expand.String {
-			out = append(out, name+"="+vr.Str)
-		}
-		return true
-	})
-	return out
 }
 
 func init() {

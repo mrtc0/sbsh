@@ -52,7 +52,6 @@ func TestPythonCommand_Invocation(t *testing.T) {
 			t.Parallel()
 
 			env, _, _ := NewTestEnv(t, tc.dir)
-			env.HC.Env = expand.ListEnviron()
 			fp := &fakePython{}
 			env.Python = fp
 			for path, body := range tc.seed {
@@ -66,4 +65,17 @@ func TestPythonCommand_Invocation(t *testing.T) {
 			assert.Equal(t, tc.wantCwd, fp.got.Cwd)
 		})
 	}
+}
+
+func TestPythonCommand_PassesEnvironment(t *testing.T) {
+	t.Parallel()
+
+	env, _, _ := NewTestEnv(t, "/work")
+	env.Env = NewEnviron(expand.ListEnviron("FOO=bar", "EMPTY="))
+	fp := &fakePython{}
+	env.Python = fp
+
+	require.NoError(t, pythonCommand(context.Background(), env, []string{"-c", "pass"}))
+
+	assert.ElementsMatch(t, []string{"FOO=bar", "EMPTY="}, fp.got.Env)
 }

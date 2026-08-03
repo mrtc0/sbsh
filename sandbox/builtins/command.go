@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path"
 
+	"github.com/mrtc0/sh/v3/expand"
 	"github.com/mrtc0/sh/v3/interp"
 
 	"github.com/mrtc0/sbsh/sandbox/python"
@@ -34,6 +35,48 @@ type Env struct {
 
 	// Python is the interpreter for running Python code. It is always available in the sandbox.
 	Python python.Interpreter
+
+	// Env is the shell's variables. It is nil only when a caller builds an Env
+	// by hand and leaves it out; ExecMiddleware always populates it.
+	Env Environ
+}
+
+// Environ is read access to the shell's variables. It is an interface rather
+// than a lookup function because a command may need the whole environment and
+// not just one name: python hands the interpreter every variable it can see.
+type Environ interface {
+	// Lookup returns the value of name and whether it is set at all, so an unset
+	// variable is distinguishable from one set to the empty string.
+	Lookup(name string) (value string, ok bool)
+
+	// All returns the environment as "NAME=value" pairs. Only plain string
+	// variables appear: an array has no single value to render.
+	All() []string
+}
+
+// shellEnviron adapts the shell's environment to Environ.
+type shellEnviron struct{ env expand.Environ }
+
+// NewEnviron returns an Environ backed by the shell's variables.
+func NewEnviron(env expand.Environ) Environ { return shellEnviron{env} }
+
+func (s shellEnviron) Lookup(name string) (string, bool) {
+	vr := s.env.Get(name)
+	if !vr.IsSet() || vr.Kind != expand.String {
+		return "", false
+	}
+	return vr.Str, true
+}
+
+func (s shellEnviron) All() []string {
+	var out []string
+	s.env.Each(func(name string, vr expand.Variable) bool {
+		if vr.IsSet() && vr.Kind == expand.String {
+			out = append(out, name+"="+vr.Str)
+		}
+		return true
+	})
+	return out
 }
 
 func (e *Env) Abs(p string) string {
@@ -82,7 +125,7 @@ func ExecMiddleware(fsys vfs.FS, opts Options) func(next interp.ExecHandlerFunc)
 				return interp.ExitStatus(127)
 			}
 
-			env := &Env{Name: args[0], FS: fsys, HC: hc, HTTP: opts.HTTP, Python: opts.Python}
+			env := &Env{Name: args[0], FS: fsys, HC: hc, HTTP: opts.HTTP, Python: opts.Python, Env: NewEnviron(hc.Env)}
 			if err := fn(ctx, env, args[1:]); err != nil {
 				// The single seam between a builtin's int exit code and the
 				// shell backend's representation. interp.ExitStatus is a uint8,
