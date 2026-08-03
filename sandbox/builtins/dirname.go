@@ -16,10 +16,10 @@ func dirname(_ context.Context, env *Env, args []string) error {
 	for _, p := range args {
 		trimmed := stripTrailingSlashes(p)
 		if trimmed == "" {
-			fmt.Fprintln(env.HC.Stdout, "/")
+			fmt.Fprintln(env.Stdout, "/")
 			continue
 		}
-		fmt.Fprintln(env.HC.Stdout, path.Dir(trimmed))
+		fmt.Fprintln(env.Stdout, path.Dir(trimmed))
 	}
 	return nil
 }

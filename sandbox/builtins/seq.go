@@ -83,12 +83,12 @@ func seq(_ context.Context, env *Env, args []string) error {
 			s = padZero(s, width)
 		}
 		if i > 0 {
-			fmt.Fprint(env.HC.Stdout, sep)
+			fmt.Fprint(env.Stdout, sep)
 		}
-		fmt.Fprint(env.HC.Stdout, s)
+		fmt.Fprint(env.Stdout, s)
 	}
 	if len(formatted) > 0 {
-		fmt.Fprintln(env.HC.Stdout)
+		fmt.Fprintln(env.Stdout)
 	}
 	return nil
 }

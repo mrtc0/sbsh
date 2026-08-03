@@ -36,7 +36,7 @@ func Test_gzip_stdinToStdout(t *testing.T) {
 	t.Parallel()
 
 	env, stdout, _ := NewTestEnv(t, "/work")
-	env.HC.Stdin = strings.NewReader("hello gzip")
+	env.Stdin = strings.NewReader("hello gzip")
 	require.NoError(t, gzipCommand(context.Background(), env, nil))
 	assert.Equal(t, "hello gzip", gunzipString(t, stdout.Bytes()))
 }
@@ -84,7 +84,7 @@ func Test_gunzip_stdin(t *testing.T) {
 	t.Parallel()
 
 	env, stdout, _ := NewTestEnv(t, "/work")
-	env.HC.Stdin = bytes.NewReader(gzipBytes(t, "from stdin"))
+	env.Stdin = bytes.NewReader(gzipBytes(t, "from stdin"))
 	require.NoError(t, gunzipCommand(context.Background(), env, nil))
 	assert.Equal(t, "from stdin", stdout.String())
 }

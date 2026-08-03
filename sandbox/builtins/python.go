@@ -35,9 +35,9 @@ func pythonCommand(ctx context.Context, env *Env, args []string) error {
 	res, runErr := env.Python.Run(ctx, python.Invocation{
 		Code:  code,
 		Argv:  argv,
-		Cwd:   env.HC.Dir,
+		Cwd:   env.Dir,
 		Env:   env.Env.All(),
-		Stdin: env.HC.Stdin,
+		Stdin: env.Stdin,
 		FS:    env.FS,
 	})
 
@@ -45,10 +45,10 @@ func pythonCommand(ctx context.Context, env *Env, args []string) error {
 	// timeout or cancellation still produces partial output that the user
 	// expects to see. Write errors (e.g. the output limit is hit) must not be
 	// swallowed either, or truncation would be reported as success.
-	if _, err := io.WriteString(env.HC.Stdout, res.Stdout); err != nil {
+	if _, err := io.WriteString(env.Stdout, res.Stdout); err != nil {
 		return err
 	}
-	if _, err := io.WriteString(env.HC.Stderr, res.Stderr); err != nil {
+	if _, err := io.WriteString(env.Stderr, res.Stderr); err != nil {
 		return err
 	}
 

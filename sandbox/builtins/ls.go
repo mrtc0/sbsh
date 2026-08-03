@@ -24,7 +24,7 @@ func ls(_ context.Context, env *Env, args []string) error {
 			return err
 		}
 		if !info.IsDir() {
-			fmt.Fprintln(env.HC.Stdout, p)
+			fmt.Fprintln(env.Stdout, p)
 			continue
 		}
 		entries, err := afero.ReadDir(env.FS, env.Abs(p))
@@ -34,10 +34,10 @@ func ls(_ context.Context, env *Env, args []string) error {
 		sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 		for _, e := range entries {
 			if *long {
-				fmt.Fprintf(env.HC.Stdout, "%s %8d %s %s\n",
+				fmt.Fprintf(env.Stdout, "%s %8d %s %s\n",
 					e.Mode(), e.Size(), e.ModTime().Format("2006-01-02 15:04"), e.Name())
 			} else {
-				fmt.Fprintln(env.HC.Stdout, e.Name())
+				fmt.Fprintln(env.Stdout, e.Name())
 			}
 		}
 	}

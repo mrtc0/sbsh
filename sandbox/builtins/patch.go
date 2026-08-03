@@ -63,7 +63,7 @@ func patchCommand(_ context.Context, env *Env, args []string) error {
 		if err := a.apply(env); err != nil {
 			return err
 		}
-		fmt.Fprintf(env.HC.Stdout, "patching file %s\n", a.target.display)
+		fmt.Fprintf(env.Stdout, "patching file %s\n", a.target.display)
 	}
 	return nil
 }
@@ -188,7 +188,7 @@ func resolvePatchTarget(env *Env, name string, strip int) (patchTarget, error) {
 	if path.IsAbs(display) {
 		return patchTarget{}, fmt.Errorf("%q is an absolute path", display)
 	}
-	abs, err := containedPath(env.HC.Dir, display)
+	abs, err := containedPath(env.Dir, display)
 	if err != nil {
 		return patchTarget{}, err
 	}

@@ -26,13 +26,11 @@ func NewTestEnv(t *testing.T, dir string) (*Env, *bytes.Buffer, *bytes.Buffer) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	env := &Env{
-		FS: fs,
-		HC: interp.HandlerContext{
-			Dir:    dir,
-			Stdout: stdout,
-			Stderr: stderr,
-		},
-		Env: NewEnviron(expand.ListEnviron()),
+		FS:     fs,
+		Dir:    dir,
+		Stdout: stdout,
+		Stderr: stderr,
+		Env:    NewEnviron(expand.ListEnviron()),
 	}
 	return env, stdout, stderr
 }
@@ -50,14 +48,12 @@ func NewTestEnvWithDeny(t *testing.T, dir, cmd string, patterns ...string) (*Env
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	env := &Env{
-		Name: cmd,
-		FS:   deny,
-		HC: interp.HandlerContext{
-			Dir:    dir,
-			Stdout: stdout,
-			Stderr: stderr,
-		},
-		Env: NewEnviron(expand.ListEnviron()),
+		Name:   cmd,
+		FS:     deny,
+		Dir:    dir,
+		Stdout: stdout,
+		Stderr: stderr,
+		Env:    NewEnviron(expand.ListEnviron()),
 	}
 	return env, base, stdout, stderr
 }
@@ -84,14 +80,12 @@ func NewTestEnvWithHostMount(t *testing.T, cmd string, patterns ...string) (*Env
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	env := &Env{
-		Name: cmd,
-		FS:   deny,
-		HC: interp.HandlerContext{
-			Dir:    "/work",
-			Stdout: stdout,
-			Stderr: stderr,
-		},
-		Env: NewEnviron(expand.ListEnviron()),
+		Name:   cmd,
+		FS:     deny,
+		Dir:    "/work",
+		Stdout: stdout,
+		Stderr: stderr,
+		Env:    NewEnviron(expand.ListEnviron()),
 	}
 	return env, hostDir, stdout, stderr
 }
@@ -108,7 +102,7 @@ func installTestCommands(t *testing.T) {
 	t.Cleanup(func() { registry = saved })
 
 	replacement["test_echo"] = func(_ context.Context, env *Env, args []string) error {
-		fmt.Fprintln(env.HC.Stdout, strings.Join(args, " "))
+		fmt.Fprintln(env.Stdout, strings.Join(args, " "))
 		return nil
 	}
 
@@ -129,7 +123,7 @@ func installTestCommands(t *testing.T) {
 	}
 
 	replacement["test_dir"] = func(_ context.Context, env *Env, _ []string) error {
-		fmt.Fprintln(env.HC.Stdout, env.HC.Dir)
+		fmt.Fprintln(env.Stdout, env.Dir)
 		return nil
 	}
 
@@ -138,16 +132,16 @@ func installTestCommands(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		env.HC.Stdout.Write(b)
+		env.Stdout.Write(b)
 		return nil
 	}
 
 	replacement["test_net"] = func(_ context.Context, env *Env, _ []string) error {
 		if env.HTTP == nil {
-			fmt.Fprintln(env.HC.Stdout, "nil")
+			fmt.Fprintln(env.Stdout, "nil")
 			return nil
 		}
-		fmt.Fprintln(env.HC.Stdout, "client")
+		fmt.Fprintln(env.Stdout, "client")
 		return nil
 	}
 }
@@ -240,7 +234,7 @@ func TestExecMiddleware(t *testing.T) {
 			script:   "test_exit_native",
 			wantExit: 3,
 		},
-		"threads the runner Dir into Env.HC.Dir": {
+		"threads the runner Dir into Env.Dir": {
 			script:          "test_dir",
 			wantStdoutIsDir: true,
 		},

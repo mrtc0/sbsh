@@ -59,7 +59,7 @@ func tarCommand(_ context.Context, env *Env, args []string) error {
 		return fmt.Errorf("usage: tar -c|-x|-t [-z] -f archive [file...]")
 	}
 
-	base := env.HC.Dir
+	base := env.Dir
 	if changeDir != "" {
 		base = env.Abs(changeDir)
 	}
@@ -119,7 +119,7 @@ func tarCreate(env *Env, archive, base string, gz, verbose bool, files []string)
 				return err
 			}
 			if verbose {
-				fmt.Fprintln(env.HC.Stdout, hdr.Name)
+				fmt.Fprintln(env.Stdout, hdr.Name)
 			}
 			if info.IsDir() {
 				return nil
@@ -185,7 +185,7 @@ func tarExtract(env *Env, archive, base string, gz, verbose bool) error {
 			return err
 		}
 		if verbose {
-			fmt.Fprintln(env.HC.Stdout, hdr.Name)
+			fmt.Fprintln(env.Stdout, hdr.Name)
 		}
 		switch hdr.Typeflag {
 		case tar.TypeDir:
@@ -223,7 +223,7 @@ func tarList(env *Env, archive string, gz bool) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintln(env.HC.Stdout, hdr.Name)
+		fmt.Fprintln(env.Stdout, hdr.Name)
 	}
 	return nil
 }

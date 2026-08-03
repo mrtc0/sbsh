@@ -79,7 +79,7 @@ func Test_sed(t *testing.T) {
 			t.Parallel()
 
 			env, stdout, _ := NewTestEnv(t, "/work")
-			env.HC.Stdin = strings.NewReader(tc.stdin)
+			env.Stdin = strings.NewReader(tc.stdin)
 
 			require.NoError(t, sedCommand(context.Background(), env, tc.args))
 			assert.Equal(t, tc.want, stdout.String())
@@ -103,7 +103,7 @@ func Test_sed_error(t *testing.T) {
 	t.Parallel()
 
 	env, _, _ := NewTestEnv(t, "/work")
-	env.HC.Stdin = strings.NewReader("x\n")
+	env.Stdin = strings.NewReader("x\n")
 
 	require.Error(t, sedCommand(context.Background(), env, []string{"s/("}))
 }

@@ -37,7 +37,7 @@ func gzipCommand(_ context.Context, env *Env, args []string) error {
 		if err != nil {
 			return err
 		}
-		return writeGzip(env.HC.Stdout, b)
+		return writeGzip(env.Stdout, b)
 	}
 
 	for _, f := range files {
@@ -47,7 +47,7 @@ func gzipCommand(_ context.Context, env *Env, args []string) error {
 			return err
 		}
 		if toStdout {
-			if err := writeGzip(env.HC.Stdout, b); err != nil {
+			if err := writeGzip(env.Stdout, b); err != nil {
 				return err
 			}
 			continue
@@ -105,7 +105,7 @@ func gunzipFiles(env *Env, files []string, toStdout, keep bool) error {
 		if err != nil {
 			return err
 		}
-		_, err = env.HC.Stdout.Write(out)
+		_, err = env.Stdout.Write(out)
 		return err
 	}
 
@@ -120,7 +120,7 @@ func gunzipFiles(env *Env, files []string, toStdout, keep bool) error {
 			return err
 		}
 		if toStdout {
-			if _, err := env.HC.Stdout.Write(out); err != nil {
+			if _, err := env.Stdout.Write(out); err != nil {
 				return err
 			}
 			continue

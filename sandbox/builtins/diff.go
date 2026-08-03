@@ -38,10 +38,10 @@ func diffCommand(_ context.Context, env *Env, args []string) error {
 	if len(hunks) == 0 {
 		return nil
 	}
-	fmt.Fprintf(env.HC.Stdout, "--- %s\n", files[0])
-	fmt.Fprintf(env.HC.Stdout, "+++ %s\n", files[1])
+	fmt.Fprintf(env.Stdout, "--- %s\n", files[0])
+	fmt.Fprintf(env.Stdout, "+++ %s\n", files[1])
 	for _, h := range hunks {
-		fmt.Fprint(env.HC.Stdout, h)
+		fmt.Fprint(env.Stdout, h)
 	}
 	return exit(1)
 }

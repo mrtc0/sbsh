@@ -72,19 +72,19 @@ func grep(_ context.Context, env *Env, args []string) error {
 			if *lineNum {
 				prefix += fmt.Sprintf("%d:", i+1)
 			}
-			fmt.Fprintln(env.HC.Stdout, prefix+line)
+			fmt.Fprintln(env.Stdout, prefix+line)
 		}
 		switch {
 		case listFiles:
 			if n > 0 {
-				fmt.Fprintln(env.HC.Stdout, name)
+				fmt.Fprintln(env.Stdout, name)
 			}
 		case countOnly:
 			prefix := ""
 			if withName {
 				prefix += name + ":"
 			}
-			fmt.Fprintf(env.HC.Stdout, "%s%d\n", prefix, n)
+			fmt.Fprintf(env.Stdout, "%s%d\n", prefix, n)
 		}
 	}
 

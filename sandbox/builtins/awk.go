@@ -68,8 +68,8 @@ func awkCommand(ctx context.Context, env *Env, args []string) error {
 
 	config := &goawk.Config{
 		Stdin:  stdin,
-		Output: env.HC.Stdout,
-		Error:  env.HC.Stderr,
+		Output: env.Stdout,
+		Error:  env.Stderr,
 		Vars:   setVars,
 		// Fail closed: keep the host unreachable.
 		NoExec:       true,

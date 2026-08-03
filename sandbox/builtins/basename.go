@@ -19,7 +19,7 @@ func basename(_ context.Context, env *Env, args []string) error {
 	name := stripTrailingSlashes(args[0])
 	if name == "" {
 		// A path of only slashes reduces to "/".
-		fmt.Fprintln(env.HC.Stdout, "/")
+		fmt.Fprintln(env.Stdout, "/")
 		return nil
 	}
 	base := path.Base(name)
@@ -31,7 +31,7 @@ func basename(_ context.Context, env *Env, args []string) error {
 		}
 	}
 
-	fmt.Fprintln(env.HC.Stdout, base)
+	fmt.Fprintln(env.Stdout, base)
 	return nil
 }
 

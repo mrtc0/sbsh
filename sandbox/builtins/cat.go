@@ -17,7 +17,7 @@ func cat(_ context.Context, env *Env, args []string) error {
 		if err != nil {
 			return err
 		}
-		if _, err := env.HC.Stdout.Write(b); err != nil {
+		if _, err := env.Stdout.Write(b); err != nil {
 			return err
 		}
 	}

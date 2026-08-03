@@ -24,7 +24,7 @@ type walkGuard struct {
 // report writes err to stderr and records that the command's result is
 // incomplete, so it can end with a non-zero status once its work is done.
 func (g *walkGuard) report(err error) {
-	fmt.Fprintf(g.env.HC.Stderr, "%s: %v\n", g.env.Name, err)
+	fmt.Fprintf(g.env.Stderr, "%s: %v\n", g.env.Name, err)
 	g.refused = true
 }
 

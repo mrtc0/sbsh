@@ -16,7 +16,7 @@ func Test_patch(t *testing.T) {
 		t.Parallel()
 		env, _, _ := NewTestEnv(t, "/work")
 		mustWrite(t, env.FS, "/work/f", "line1\nline2\nline3\n")
-		env.HC.Stdin = strings.NewReader(
+		env.Stdin = strings.NewReader(
 			"--- f\n+++ f\n@@ -1,3 +1,3 @@\n line1\n-line2\n+CHANGED\n line3\n")
 
 		require.NoError(t, patchCommand(context.Background(), env, nil))
@@ -27,7 +27,7 @@ func Test_patch(t *testing.T) {
 		t.Parallel()
 		env, _, _ := NewTestEnv(t, "/work")
 		mustWrite(t, env.FS, "/work/f", "aaa\nbbb\n")
-		env.HC.Stdin = strings.NewReader(
+		env.Stdin = strings.NewReader(
 			"--- f\n+++ f\n@@ -1,2 +1,2 @@\n xxx\n-bbb\n+ccc\n")
 
 		require.Error(t, patchCommand(context.Background(), env, nil))
@@ -38,7 +38,7 @@ func Test_patch(t *testing.T) {
 		t.Parallel()
 		env, _, _ := NewTestEnv(t, "/work")
 		mustWrite(t, env.FS, "/work/f", "x\n")
-		env.HC.Stdin = strings.NewReader(
+		env.Stdin = strings.NewReader(
 			"--- a/f\n+++ b/f\n@@ -1,1 +1,1 @@\n-x\n+y\n")
 
 		require.NoError(t, patchCommand(context.Background(), env, []string{"-p1"}))
@@ -48,7 +48,7 @@ func Test_patch(t *testing.T) {
 	t.Run("creates a file from /dev/null", func(t *testing.T) {
 		t.Parallel()
 		env, _, _ := NewTestEnv(t, "/work")
-		env.HC.Stdin = strings.NewReader(
+		env.Stdin = strings.NewReader(
 			"--- /dev/null\n+++ new.txt\n@@ -0,0 +1,2 @@\n+hello\n+world\n")
 
 		require.NoError(t, patchCommand(context.Background(), env, nil))
@@ -133,7 +133,7 @@ func Test_patch_confinesTargets(t *testing.T) {
 			for p, content := range tt.files {
 				mustWrite(t, env.FS, p, content)
 			}
-			env.HC.Stdin = strings.NewReader(tt.diff)
+			env.Stdin = strings.NewReader(tt.diff)
 
 			err := patchCommand(context.Background(), env, tt.args)
 			if tt.wantErr {
@@ -238,7 +238,7 @@ func Test_patch_atomicity(t *testing.T) {
 			for p, content := range tt.files {
 				mustWrite(t, env.FS, p, content)
 			}
-			env.HC.Stdin = strings.NewReader(tt.diff)
+			env.Stdin = strings.NewReader(tt.diff)
 
 			err := patchCommand(context.Background(), env, tt.args)
 			if tt.wantErr {
@@ -275,7 +275,7 @@ func Test_patch_keepsFilesWrittenBeforeAnIOFailure(t *testing.T) {
 	// The first section is an ordinary modification; the second creates a file the
 	// deny policy refuses. A creation reads nothing beforehand, so the refusal
 	// surfaces only at the write itself.
-	env.HC.Stdin = strings.NewReader(
+	env.Stdin = strings.NewReader(
 		"--- a.txt\n+++ a.txt\n@@ -1,1 +1,1 @@\n-one\n+ONE\n" +
 			"--- /dev/null\n+++ secret.txt\n@@ -0,0 +1,1 @@\n+leaked\n")
 
@@ -304,7 +304,7 @@ func Test_diff_patch_roundtrip(t *testing.T) {
 	// diff exits 1 when files differ; that is expected, not an error here.
 	_ = diffCommand(context.Background(), env, []string{"a/f", "b/f"})
 
-	env.HC.Stdin = strings.NewReader(stdout.String())
+	env.Stdin = strings.NewReader(stdout.String())
 	require.NoError(t, patchCommand(context.Background(), env, []string{"-p1"}))
 	assert.Equal(t, want, mustRead(t, env.FS, "/work/f"))
 }

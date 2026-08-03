@@ -53,16 +53,16 @@ func cut(_ context.Context, env *Env, args []string) error {
 		}
 		for _, line := range splitLines(b) {
 			if haveChars {
-				fmt.Fprintln(env.HC.Stdout, selectChars(line, ranges))
+				fmt.Fprintln(env.Stdout, selectChars(line, ranges))
 				continue
 			}
 			if !strings.Contains(line, delim) {
 				if !onlyDelimited {
-					fmt.Fprintln(env.HC.Stdout, line)
+					fmt.Fprintln(env.Stdout, line)
 				}
 				continue
 			}
-			fmt.Fprintln(env.HC.Stdout, selectFields(line, delim, ranges))
+			fmt.Fprintln(env.Stdout, selectFields(line, delim, ranges))
 		}
 	}
 	return nil

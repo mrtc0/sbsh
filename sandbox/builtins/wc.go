@@ -36,7 +36,7 @@ func wc(_ context.Context, env *Env, args []string) error {
 		if name != "" {
 			fmt.Fprintf(&b, " %s", name)
 		}
-		fmt.Fprintln(env.HC.Stdout, b.String())
+		fmt.Fprintln(env.Stdout, b.String())
 	}
 
 	count := func(b []byte) (lines, words, bytes int) {
