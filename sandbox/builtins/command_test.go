@@ -121,6 +121,18 @@ func installTestCommands(t *testing.T) {
 		return exit(300)
 	}
 
+	replacement["test_exit_msg"] = func(_ context.Context, _ *command.Invocation) error {
+		return command.Exit(2, "bad usage")
+	}
+
+	replacement["test_exit_wrapped"] = func(_ context.Context, _ *command.Invocation) error {
+		return fmt.Errorf("wrapped: %w", command.Exit(2, "bad usage"))
+	}
+
+	replacement["test_exit_wrapped_silent"] = func(_ context.Context, _ *command.Invocation) error {
+		return fmt.Errorf("wrapped: %w", command.Exit(3))
+	}
+
 	replacement["test_exit_native"] = func(_ context.Context, _ *command.Invocation) error {
 		return interp.ExitStatus(3)
 	}
@@ -220,13 +232,30 @@ func TestExecMiddleware(t *testing.T) {
 			wantStderr: "definitely_not_a_command: command not found\n",
 			wantExit:   127,
 		},
+		// Returning a plain error is outside the command contract; the fallback
+		// is there so a misuse still reports something rather than passing for
+		// success.
 		"a plain error becomes exit 1 with name-prefixed stderr": {
 			script:     "test_fail",
 			wantStderr: "test_fail: boom\n",
 			wantExit:   1,
 		},
-		"a builtin exit error is translated to its code": {
+		"an exit without a message is silent": {
 			script:   "test_exit",
+			wantExit: 3,
+		},
+		"an exit with a message prints name: message": {
+			script:     "test_exit_msg",
+			wantStderr: "test_exit_msg: bad usage\n",
+			wantExit:   2,
+		},
+		"a wrapped exit prints its own message, not the wrapper's": {
+			script:     "test_exit_wrapped",
+			wantStderr: "test_exit_wrapped: bad usage\n",
+			wantExit:   2,
+		},
+		"a wrapped message-less exit stays silent": {
+			script:   "test_exit_wrapped_silent",
 			wantExit: 3,
 		},
 		"an out-of-range exit code is reduced modulo 256": {

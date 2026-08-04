@@ -116,6 +116,13 @@ func ExecMiddleware(fsys vfs.FS, opts Options) func(next interp.ExecHandlerFunc)
 				// reports process exit statuses, and in exactly one place.
 				var ee *command.ExitError
 				if errors.As(err, &ee) {
+					// Only the message the payload carries is shown. Text
+					// wrapped around it belongs to the wrapper, not to the
+					// command, so a status-only exit stays silent even when it
+					// reaches here wrapped.
+					if ee.Msg != "" {
+						fmt.Fprintf(hc.Stderr, "%s: %s\n", args[0], ee.Msg)
+					}
 					return interp.ExitStatus(uint8(ee.Code))
 				}
 				// Defensive: a builtin may surface the backend's native exit
@@ -124,6 +131,9 @@ func ExecMiddleware(fsys vfs.FS, opts Options) func(next interp.ExecHandlerFunc)
 				if errors.As(err, &exitStatus) {
 					return exitStatus
 				}
+				// Defensive: returning a plain error is outside the contract —
+				// there is no status to go by, so the sandbox reports it as a
+				// generic failure rather than guessing one.
 				fmt.Fprintf(hc.Stderr, "%s: %v\n", args[0], err)
 				return interp.ExitStatus(1)
 			}
