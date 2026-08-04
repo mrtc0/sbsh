@@ -7,7 +7,7 @@
 //
 // Nothing here refers to the shell that does the dispatching. A command
 // receives its arguments, its streams, the environment, the working directory
-// and the sandbox's filesystem, and returns an error.
+// and the sandbox's filesystem, and reports back with [Exit] or [Exitf].
 package command
 
 import (
@@ -16,6 +16,7 @@ import (
 	"io"
 	"net/http"
 	"path"
+	"strings"
 
 	"github.com/mrtc0/sbsh/sandbox/python"
 	"github.com/mrtc0/sbsh/vfs"
@@ -30,6 +31,9 @@ import (
 // Registration rejects anything else, an empty Description, and a name that a
 // builtin or the shell itself already answers to, since a command by such a name
 // could never run.
+//
+// Run returns [Exit] or [Exitf] — that is the whole return contract, for
+// success as much as for failure. See [Exit].
 type Command interface {
 	Name() string
 	Description() string
@@ -114,31 +118,73 @@ func (inv *Invocation) Getenv(name string) string {
 
 // RunFunc is a command's behaviour. Everything the command is given for one
 // call is in the Invocation, so a caller needs to hold nothing beside it.
+//
+// It returns [Exit] or [Exitf], whether it succeeded or not. See [Exit].
 type RunFunc func(ctx context.Context, inv *Invocation) error
 
-// ExitError is how a command reports a non-zero exit status. It carries an int
-// so a caller can pass whatever its underlying library produced without
-// worrying about truncation; the sandbox reduces it modulo 256 in one place,
-// the way the OS reports a process exit status.
+// ExitError is how a command reports its exit status, along with the message to
+// show for it when there is one. It is what [Exit] and [Exitf] return, and a
+// command has no reason to build one by hand.
 //
-// Returning any other error makes the sandbox print it, prefixed with the
-// command's name, and exit 1 — which is what a usage or I/O failure wants,
-// while a command with statuses of its own (like grep's 1 for "no match")
-// returns this instead.
-type ExitError struct{ Code int }
+// Code carries an int so a caller can pass whatever its underlying library
+// produced without worrying about truncation; the sandbox reduces it modulo 256
+// in one place, the way the OS reports a process exit status.
+//
+// Msg is what the sandbox prints to stderr, prefixed with the command's name. It
+// is empty when the command has nothing to say — a status of its own, like
+// grep's 1 for "no match", is not a diagnostic.
+//
+// Returning any other error is outside the contract: the sandbox has no status
+// to go by, so it falls back to printing the error and exiting 1.
+type ExitError struct {
+	Code int
+	Msg  string
+}
 
-func (e *ExitError) Error() string { return fmt.Sprintf("exit status %d", uint8(e.Code)) }
+// Error renders the message when there is one, so a Go caller inspecting the
+// error reads what the caller of the command would have been shown, and the
+// status otherwise.
+func (e *ExitError) Error() string {
+	if e.Msg != "" {
+		return e.Msg
+	}
+	return fmt.Sprintf("exit status %d", uint8(e.Code))
+}
 
-// Exit returns an error that exits the command with code.
-func Exit(code int) error { return &ExitError{Code: code} }
+// Exit returns the error a command returns to finish. It is the normal return
+// path and not only the failing one: the command picks its status, and attaches
+// a message only when the caller should see one.
+//
+//	return command.Exit(0)              // done, nothing to say
+//	return command.Exit(1)              // grep's "no match": a status, not an error
+//	return command.Exit(2, "bad usage") // prints "name: bad usage" to stderr
+//
+// The msg parts are joined with a space, so the pieces of a sentence may be
+// passed separately. Passing none prints nothing.
+//
+// Do not wrap the result: the sandbox shows the message the [ExitError] carries,
+// so text wrapped around it is dropped. Build the message with [Exitf] instead.
+func Exit(code int, msg ...string) error {
+	return &ExitError{Code: code, Msg: strings.Join(msg, " ")}
+}
+
+// Exitf is [Exit] with the message formatted, which is how a command reports
+// what went wrong together with the status for it:
+//
+//	return command.Exitf(1, "cannot read %s: %v", name, err)
+func Exitf(code int, format string, args ...any) error {
+	return &ExitError{Code: code, Msg: fmt.Sprintf(format, args...)}
+}
 
 // New returns a [Command] with the given metadata that runs fn. It saves
 // declaring a type for a command that holds no state:
 //
 //	sandbox.WithCommand(command.New("hello", "greet the caller",
 //		func(_ context.Context, inv *command.Invocation) error {
-//			_, err := fmt.Fprintln(inv.Stdout, "hello")
-//			return err
+//			if _, err := fmt.Fprintln(inv.Stdout, "hello"); err != nil {
+//				return command.Exitf(1, "%v", err)
+//			}
+//			return command.Exit(0)
 //		}))
 func New(name, description string, fn RunFunc) Command {
 	return &funcCommand{name: name, description: description, fn: fn}
