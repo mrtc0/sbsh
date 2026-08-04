@@ -1,8 +1,11 @@
 package command_test
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,6 +37,58 @@ func TestInvocation_Abs(t *testing.T) {
 			assert.Equal(t, tc.want, inv.Abs(tc.path))
 		})
 	}
+}
+
+func TestNew(t *testing.T) {
+	t.Parallel()
+
+	cmd := command.New("hello", "greet the caller", func(_ context.Context, inv *command.Invocation) error {
+		_, err := fmt.Fprintln(inv.Stdout, "hello", inv.Args[0])
+		return err
+	})
+
+	assert.Equal(t, "hello", cmd.Name())
+	assert.Equal(t, "greet the caller", cmd.Description())
+
+	var out bytes.Buffer
+	require.NoError(t, cmd.Run(context.Background(), &command.Invocation{Args: []string{"world"}, Stdout: &out}))
+	assert.Equal(t, "hello world\n", out.String())
+}
+
+func TestNew_withoutImplementation(t *testing.T) {
+	t.Parallel()
+
+	err := command.New("hello", "greet the caller", nil).Run(context.Background(), &command.Invocation{})
+	assert.ErrorContains(t, err, "no implementation")
+}
+
+func TestInvocation_Getenv(t *testing.T) {
+	t.Parallel()
+
+	inv := &command.Invocation{Env: testEnviron{"HOME": "/home/user", "EMPTY": ""}}
+	assert.Equal(t, "/home/user", inv.Getenv("HOME"))
+	assert.Equal(t, "", inv.Getenv("EMPTY"))
+	assert.Equal(t, "", inv.Getenv("MISSING"))
+
+	// A host driving Run directly need not wire an environment up.
+	assert.Equal(t, "", (&command.Invocation{}).Getenv("HOME"))
+}
+
+// testEnviron is the environment a host would stub in to drive Run itself.
+type testEnviron map[string]string
+
+func (e testEnviron) Lookup(name string) (string, bool) {
+	v, ok := e[name]
+	return v, ok
+}
+
+func (e testEnviron) All() []string {
+	out := make([]string, 0, len(e))
+	for k, v := range e {
+		out = append(out, k+"="+v)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func TestExit(t *testing.T) {

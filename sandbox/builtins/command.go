@@ -47,11 +47,38 @@ func exit(code int) error { return command.Exit(code) }
 type Options struct {
 	HTTP   *http.Client
 	Python python.Interpreter
+
+	// Commands are the commands the host registered from Go, keyed by name. The
+	// lookup in resolve is the only thing that tells them from a builtin: they
+	// are the same [command.RunFunc], so building the invocation, translating the
+	// exit code and reporting "command not found" are shared. The sandbox keeps
+	// the two sets of names disjoint, so which is consulted first is not
+	// observable.
+	Commands map[string]command.Command
 }
 
 var registry = map[string]command.RunFunc{}
 
 func Register(name string, fn command.RunFunc) { registry[name] = fn }
+
+// Registered reports whether name is a builtin. The sandbox uses it to refuse a
+// registration that would shadow one.
+func Registered(name string) bool {
+	_, ok := registry[name]
+	return ok
+}
+
+// resolve finds the implementation of name among the builtins and the commands
+// the host registered.
+func resolve(name string, opts Options) (command.RunFunc, bool) {
+	if fn, ok := registry[name]; ok {
+		return fn, true
+	}
+	if cmd, ok := opts.Commands[name]; ok {
+		return cmd.Run, true
+	}
+	return nil, false
+}
 
 // ExecMiddleware returns an interp.ExecHandlerFunc that looks up the command in the registry and executes it.
 func ExecMiddleware(fsys vfs.FS, opts Options) func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
@@ -62,7 +89,7 @@ func ExecMiddleware(fsys vfs.FS, opts Options) func(next interp.ExecHandlerFunc)
 				return interp.ExitStatus(0)
 			}
 
-			fn, ok := registry[args[0]]
+			fn, ok := resolve(args[0], opts)
 			if !ok {
 				fmt.Fprintf(hc.Stderr, "%s: command not found\n", args[0])
 				return interp.ExitStatus(127)
