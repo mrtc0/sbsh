@@ -3,7 +3,6 @@ package builtins
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"slices"
@@ -21,10 +20,10 @@ func rm(_ context.Context, inv *command.Invocation) error {
 	force := flags.Bool("-f")
 	paths, err := flags.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if len(paths) == 0 && !*force {
-		return fmt.Errorf("usage: rm [-r] [-f] file...")
+		return command.Exit(1, "usage: rm [-r] [-f] file...")
 	}
 
 	guard := &walkGuard{inv: inv}
@@ -35,24 +34,24 @@ func rm(_ context.Context, inv *command.Invocation) error {
 			if guard.skip(err) || (*force && errors.Is(err, fs.ErrNotExist)) {
 				continue
 			}
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		if info.IsDir() {
 			if !*recursive {
-				return fmt.Errorf("%q is a directory", p)
+				return command.Exitf(1, "%q is a directory", p)
 			}
 			if err := removeTree(inv, guard, abs, *force); err != nil {
-				return err
+				return command.Exitf(1, "%v", err)
 			}
 			continue
 		}
 		if err := removeEntry(inv, guard, abs, *force); err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 	}
 
 	if guard.refused {
-		return exit(1)
+		return command.Exit(1)
 	}
 	return nil
 }

@@ -36,7 +36,7 @@ func tarCommand(_ context.Context, inv *command.Invocation) error {
 	changeDirFlag := fs.String("", "-C")
 	files, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	gz := *gzFlag
 	verbose := *verboseFlag
@@ -53,12 +53,12 @@ func tarCommand(_ context.Context, inv *command.Invocation) error {
 			continue
 		}
 		if mode != 0 {
-			return fmt.Errorf("conflicting modes -- %c and %c", mode, m.c)
+			return command.Exitf(1, "conflicting modes -- %c and %c", mode, m.c)
 		}
 		mode = m.c
 	}
 	if mode == 0 {
-		return fmt.Errorf("usage: tar -c|-x|-t [-z] -f archive [file...]")
+		return command.Exit(1, "usage: tar -c|-x|-t [-z] -f archive [file...]")
 	}
 
 	base := inv.Dir
@@ -79,10 +79,10 @@ func tarCommand(_ context.Context, inv *command.Invocation) error {
 
 func tarCreate(inv *command.Invocation, archive, base string, gz, verbose bool, files []string) error {
 	if archive == "" {
-		return fmt.Errorf("no archive file specified")
+		return command.Exit(1, "no archive file specified")
 	}
 	if len(files) == 0 {
-		return fmt.Errorf("no files specified")
+		return command.Exit(1, "no files specified")
 	}
 
 	var buf bytes.Buffer
@@ -134,28 +134,28 @@ func tarCreate(inv *command.Invocation, archive, base string, gz, verbose bool, 
 			return err
 		}))
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 	}
 	if err := tw.Close(); err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 
 	out := buf.Bytes()
 	if gz {
 		var gzBuf bytes.Buffer
 		if err := writeGzip(&gzBuf, out); err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		out = gzBuf.Bytes()
 	}
 	// The archive is written even when a member was refused: it holds everything
 	// that could be read, and the exit code reports that it is not the whole tree.
 	if err := afero.WriteFile(inv.FS, inv.Abs(archive), out, 0o644); err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if guard.refused {
-		return exit(2)
+		return command.Exit(2)
 	}
 	return nil
 }
@@ -170,7 +170,7 @@ func tarCreate(inv *command.Invocation, archive, base string, gz, verbose bool, 
 func tarExtract(inv *command.Invocation, archive, base string, gz, verbose bool) error {
 	tr, closer, err := tarReader(inv, archive, gz)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	defer closer()
 
@@ -180,11 +180,11 @@ func tarExtract(inv *command.Invocation, archive, base string, gz, verbose bool)
 			break
 		}
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		target, err := containedPath(base, hdr.Name)
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		if verbose {
 			fmt.Fprintln(inv.Stdout, hdr.Name)
@@ -192,18 +192,18 @@ func tarExtract(inv *command.Invocation, archive, base string, gz, verbose bool)
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			if err := inv.FS.MkdirAll(target, os.FileMode(hdr.Mode)); err != nil {
-				return err
+				return command.Exitf(1, "%v", err)
 			}
 		default:
 			if err := inv.FS.MkdirAll(path.Dir(target), 0o755); err != nil {
-				return err
+				return command.Exitf(1, "%v", err)
 			}
 			b, err := io.ReadAll(tr)
 			if err != nil {
-				return err
+				return command.Exitf(1, "%v", err)
 			}
 			if err := afero.WriteFile(inv.FS, target, b, os.FileMode(hdr.Mode)); err != nil {
-				return err
+				return command.Exitf(1, "%v", err)
 			}
 		}
 	}
@@ -213,7 +213,7 @@ func tarExtract(inv *command.Invocation, archive, base string, gz, verbose bool)
 func tarList(inv *command.Invocation, archive string, gz bool) error {
 	tr, closer, err := tarReader(inv, archive, gz)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	defer closer()
 
@@ -223,7 +223,7 @@ func tarList(inv *command.Invocation, archive string, gz bool) error {
 			break
 		}
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		fmt.Fprintln(inv.Stdout, hdr.Name)
 	}

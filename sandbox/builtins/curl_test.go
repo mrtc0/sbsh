@@ -56,6 +56,7 @@ func Test_curl(t *testing.T) {
 		wantContains []string
 		wantFile     string
 		wantExit     int
+		wantMsg      string
 	}{
 		"prints the body": {
 			path:       "/",
@@ -86,6 +87,7 @@ func Test_curl(t *testing.T) {
 			path:       "/missing",
 			wantStdout: "",
 			wantExit:   curlFailExit,
+			wantMsg:    "the requested URL returned error: 404 Not Found",
 		},
 		"-L follows the redirect": {
 			args:       []string{"-L"},
@@ -111,7 +113,7 @@ func Test_curl(t *testing.T) {
 			var got capturedRequest
 			srv := curlTestServer(t, &got)
 
-			inv, stdout, _ := NewTestEnv(t, "/work")
+			inv, stdout, stderr := NewTestEnv(t, "/work")
 			inv.HTTP = &http.Client{}
 
 			inv.Args = append(tc.args, srv.URL+tc.path)
@@ -121,6 +123,10 @@ func Test_curl(t *testing.T) {
 				var ee *command.ExitError
 				require.ErrorAs(t, err, &ee)
 				assert.Equal(t, tc.wantExit, ee.Code, "exit code")
+				// The failure is reported through the exit itself, so the sandbox
+				// prints it as "curl: ..." rather than curl writing it separately.
+				assert.Equal(t, tc.wantMsg, ee.Msg, "message")
+				assert.Empty(t, stderr.String(), "stderr")
 			} else {
 				require.NoError(t, err)
 			}

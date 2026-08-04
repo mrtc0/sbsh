@@ -26,14 +26,14 @@ func cut(_ context.Context, inv *command.Invocation) error {
 	onlyDelim := fs.Bool("-s", "--only-delimited")
 	files, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	haveFields, haveChars := fs.Seen("-f"), fs.Seen("-c")
 	delim := *delimFlag
 	onlyDelimited := *onlyDelim
 
 	if haveFields == haveChars {
-		return fmt.Errorf("usage: cut (-f LIST [-d DELIM] [-s] | -c LIST) [file...]")
+		return command.Exit(1, "usage: cut (-f LIST [-d DELIM] [-s] | -c LIST) [file...]")
 	}
 
 	spec := *fieldsSpec
@@ -42,7 +42,7 @@ func cut(_ context.Context, inv *command.Invocation) error {
 	}
 	ranges, err := parseCutRanges(spec)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 
 	if len(files) == 0 {
@@ -51,7 +51,7 @@ func cut(_ context.Context, inv *command.Invocation) error {
 	for _, f := range files {
 		b, err := readSource(inv, f)
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		for _, line := range splitLines(b) {
 			if haveChars {

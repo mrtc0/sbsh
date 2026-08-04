@@ -28,10 +28,10 @@ func jqCommand(ctx context.Context, inv *command.Invocation) error {
 	exitStatusFlag := fs.Bool("-e", "--exit-status")
 	rest, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if len(rest) == 0 {
-		return fmt.Errorf("usage: jq [-cnrse] filter [file...]")
+		return command.Exit(1, "usage: jq [-cnrse] filter [file...]")
 	}
 	filter := rest[0]
 	files := rest[1:]
@@ -44,12 +44,12 @@ func jqCommand(ctx context.Context, inv *command.Invocation) error {
 
 	query, err := gojq.Parse(filter)
 	if err != nil {
-		return fmt.Errorf("compile error: %w", err)
+		return command.Exitf(1, "compile error: %v", err)
 	}
 
 	inputs, err := jqInputs(inv, files, nullInput, slurp)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 
 	// exit-status tracking: 0 if the last output was neither null nor false,
@@ -68,16 +68,16 @@ func jqCommand(ctx context.Context, inv *command.Invocation) error {
 				var halt *gojq.HaltError
 				if errors.As(e, &halt) {
 					if code := halt.ExitCode(); code != 0 {
-						return exit(code)
+						return command.Exit(code)
 					}
 					return nil
 				}
-				return e
+				return command.Exitf(1, "%v", e)
 			}
 			produced = true
 			lastOutput = v
 			if err := jqWrite(inv.Stdout, v, compact, raw); err != nil {
-				return err
+				return command.Exitf(1, "%v", err)
 			}
 		}
 	}
@@ -85,9 +85,9 @@ func jqCommand(ctx context.Context, inv *command.Invocation) error {
 	if exitStatus {
 		switch {
 		case !produced:
-			return exit(4)
+			return command.Exit(4)
 		case lastOutput == nil || lastOutput == false:
-			return exit(1)
+			return command.Exit(1)
 		}
 	}
 	return nil

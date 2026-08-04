@@ -17,7 +17,7 @@ import (
 func hashFiles(inv *command.Invocation, newHash func() hash.Hash) error {
 	files, err := NewFlagSet().Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if len(files) == 0 {
 		files = []string{"-"}
@@ -25,7 +25,7 @@ func hashFiles(inv *command.Invocation, newHash func() hash.Hash) error {
 	for _, f := range files {
 		b, err := readSource(inv, f)
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		h := newHash()
 		h.Write(b)

@@ -2,7 +2,6 @@ package builtins
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/mrtc0/sbsh/sandbox/command"
 )
@@ -13,21 +12,21 @@ func mkdir(_ context.Context, inv *command.Invocation) error {
 	parents := fs.Bool("-p")
 	paths, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if len(paths) == 0 {
-		return fmt.Errorf("usage: mkdir [-p] directory...")
+		return command.Exit(1, "usage: mkdir [-p] directory...")
 	}
 	for _, p := range paths {
 		abs := inv.Abs(p)
 		if *parents {
 			if err := inv.FS.MkdirAll(abs, 0o755); err != nil {
-				return err
+				return command.Exitf(1, "%v", err)
 			}
 			continue
 		}
 		if err := inv.FS.Mkdir(abs, 0o755); err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 	}
 	return nil

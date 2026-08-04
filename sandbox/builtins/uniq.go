@@ -22,10 +22,10 @@ func uniqCommand(_ context.Context, inv *command.Invocation) error {
 	fold := fs.Bool("-i")
 	files, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if len(files) > 1 {
-		return fmt.Errorf("usage: uniq [-cdui] [file]")
+		return command.Exit(1, "usage: uniq [-cdui] [file]")
 	}
 
 	src := "-"
@@ -34,7 +34,7 @@ func uniqCommand(_ context.Context, inv *command.Invocation) error {
 	}
 	b, err := readSource(inv, src)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	lines := splitLines(b)
 

@@ -125,7 +125,7 @@ func Test_grep(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			inv, stdout, _ := NewTestEnv(t, "/work")
+			inv, stdout, stderr := NewTestEnv(t, "/work")
 			for path, body := range tc.seed {
 				mustWrite(t, inv.FS, path, body)
 			}
@@ -138,11 +138,20 @@ func Test_grep(t *testing.T) {
 
 			switch {
 			case tc.wantErr:
-				require.Error(t, err)
-			case tc.wantExit1:
+				// A failure the caller should see carries its own message, so the
+				// sandbox has something to print on grep's behalf.
 				var ee *command.ExitError
 				require.ErrorAs(t, err, &ee)
 				assert.Equal(t, 1, ee.Code)
+				assert.NotEmpty(t, ee.Msg, "a failure carries the message to display")
+			case tc.wantExit1:
+				// "Nothing matched" is a status, not a diagnostic: no message, and
+				// nothing written on the way out either.
+				var ee *command.ExitError
+				require.ErrorAs(t, err, &ee)
+				assert.Equal(t, 1, ee.Code)
+				assert.Empty(t, ee.Msg, "no match is a status, not a message")
+				assert.Empty(t, stderr.String(), "stderr")
 			default:
 				require.NoError(t, err)
 				if tc.wantContains != nil {

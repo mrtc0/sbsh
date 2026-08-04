@@ -22,18 +22,18 @@ func diffCommand(_ context.Context, inv *command.Invocation) error {
 	fs.Bool("-u") // unified format is the only output; accepted for compatibility
 	files, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if len(files) != 2 {
-		return fmt.Errorf("usage: diff [-u] file1 file2")
+		return command.Exit(1, "usage: diff [-u] file1 file2")
 	}
 	a, err := readSource(inv, files[0])
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	b, err := readSource(inv, files[1])
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 
 	hunks := unifiedHunks(splitLines(a), splitLines(b))
@@ -45,7 +45,7 @@ func diffCommand(_ context.Context, inv *command.Invocation) error {
 	for _, h := range hunks {
 		fmt.Fprint(inv.Stdout, h)
 	}
-	return exit(1)
+	return command.Exit(1)
 }
 
 type diffOp struct {

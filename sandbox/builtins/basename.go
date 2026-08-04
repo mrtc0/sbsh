@@ -15,7 +15,7 @@ import (
 //	basename path [suffix]
 func basename(_ context.Context, inv *command.Invocation) error {
 	if len(inv.Args) == 0 || len(inv.Args) > 2 {
-		return fmt.Errorf("usage: basename path [suffix]")
+		return command.Exit(1, "usage: basename path [suffix]")
 	}
 
 	name := stripTrailingSlashes(inv.Args[0])

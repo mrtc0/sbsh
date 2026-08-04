@@ -3,7 +3,6 @@ package builtins
 import (
 	"context"
 	"errors"
-	"fmt"
 	"path"
 	"syscall"
 
@@ -17,10 +16,10 @@ import (
 func mv(_ context.Context, inv *command.Invocation) error {
 	rest, err := NewFlagSet().Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if len(rest) < 2 {
-		return fmt.Errorf("usage: mv source... dest")
+		return command.Exit(1, "usage: mv source... dest")
 	}
 	dst := rest[len(rest)-1]
 	srcs := rest[:len(rest)-1]
@@ -29,7 +28,7 @@ func mv(_ context.Context, inv *command.Invocation) error {
 	info, err := inv.FS.Stat(dstAbs)
 	dstIsDir := err == nil && info.IsDir()
 	if len(srcs) > 1 && !dstIsDir {
-		return fmt.Errorf("target %q is not a directory", dst)
+		return command.Exitf(1, "target %q is not a directory", dst)
 	}
 
 	for _, s := range srcs {
@@ -42,9 +41,9 @@ func mv(_ context.Context, inv *command.Invocation) error {
 			// A rename across mounts fails with EXDEV (they act as separate filesystems).
 			// The raw "invalid cross-device link" is unclear, so reword the cause.
 			if errors.Is(err, syscall.EXDEV) {
-				return fmt.Errorf("cannot move %q to %q across mount points", s, dst)
+				return command.Exitf(1, "cannot move %q to %q across mount points", s, dst)
 			}
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 	}
 	return nil

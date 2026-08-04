@@ -31,10 +31,10 @@ func grep(_ context.Context, inv *command.Invocation) error {
 
 	rest, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if len(rest) == 0 {
-		return fmt.Errorf("usage: grep [-cEilnrv] pattern [file...]")
+		return command.Exit(1, "usage: grep [-cEilnrv] pattern [file...]")
 	}
 
 	pattern := rest[0]
@@ -46,7 +46,7 @@ func grep(_ context.Context, inv *command.Invocation) error {
 	}
 	re, err := regexp.Compile(expr)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 
 	invert := *invertFlag
@@ -95,7 +95,7 @@ func grep(_ context.Context, inv *command.Invocation) error {
 	if len(files) == 0 {
 		b, err := readSource(inv, "-")
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		scan("(standard input)", b)
 	} else {
@@ -106,11 +106,11 @@ func grep(_ context.Context, inv *command.Invocation) error {
 				if guard.skip(err) {
 					continue
 				}
-				return err
+				return command.Exitf(1, "%v", err)
 			}
 			if info.IsDir() {
 				if !*recursive {
-					return fmt.Errorf("%q is a directory", f)
+					return command.Exitf(1, "%q is a directory", f)
 				}
 				err := afero.Walk(inv.FS, abs, guard.wrap(func(p string, fi os.FileInfo, _ error) error {
 					if fi.IsDir() {
@@ -133,7 +133,7 @@ func grep(_ context.Context, inv *command.Invocation) error {
 					return nil
 				}))
 				if err != nil {
-					return err
+					return command.Exitf(1, "%v", err)
 				}
 				continue
 			}
@@ -142,7 +142,7 @@ func grep(_ context.Context, inv *command.Invocation) error {
 				if guard.skip(err) {
 					continue
 				}
-				return err
+				return command.Exitf(1, "%v", err)
 			}
 			scan(f, b)
 		}
@@ -152,9 +152,9 @@ func grep(_ context.Context, inv *command.Invocation) error {
 	// stays reserved for "nothing matched", so 2 is what reports an error.
 	switch {
 	case guard.refused:
-		return exit(2)
+		return command.Exit(2)
 	case !matched:
-		return exit(1)
+		return command.Exit(1)
 	}
 	return nil
 }

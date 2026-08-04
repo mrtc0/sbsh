@@ -114,11 +114,11 @@ func installTestCommands(t *testing.T) {
 	}
 
 	replacement["test_exit"] = func(_ context.Context, _ *command.Invocation) error {
-		return exit(3)
+		return command.Exit(3)
 	}
 
 	replacement["test_exit_big"] = func(_ context.Context, _ *command.Invocation) error {
-		return exit(300)
+		return command.Exit(300)
 	}
 
 	replacement["test_exit_msg"] = func(_ context.Context, _ *command.Invocation) error {

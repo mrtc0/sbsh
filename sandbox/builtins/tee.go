@@ -16,16 +16,16 @@ func tee(_ context.Context, inv *command.Invocation) error {
 	appendMode := fs.Bool("-a", "--append")
 	files, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 
 	b, err := readSource(inv, "-")
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 
 	if _, err := inv.Stdout.Write(b); err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 
 	flag := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
@@ -35,14 +35,14 @@ func tee(_ context.Context, inv *command.Invocation) error {
 	for _, f := range files {
 		file, err := inv.FS.OpenFile(inv.Abs(f), flag, 0o644)
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		if _, err := file.Write(b); err != nil {
 			file.Close()
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		if err := file.Close(); err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 	}
 	return nil

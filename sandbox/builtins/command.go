@@ -39,11 +39,6 @@ func (s shellEnviron) All() []string {
 	return out
 }
 
-// exit reports a non-zero exit code from a builtin. It is [command.Exit], so a
-// builtin and a registered command report a status the same way and
-// ExecMiddleware has one representation to translate.
-func exit(code int) error { return command.Exit(code) }
-
 type Options struct {
 	HTTP   *http.Client
 	Python python.Interpreter
@@ -59,6 +54,14 @@ type Options struct {
 
 var registry = map[string]command.RunFunc{}
 
+// Register adds a builtin under name. A builtin is bound by the same return
+// contract as a command the host registers: [command.Exit] with a code alone for
+// a status of its own — grep's 1 for "no match", diff's for "they differ" — and
+// [command.Exit] or [command.Exitf] with a message for a failure the caller
+// should be told about. A builtin does not write a diagnostic of its own for the
+// failure it returns on: the message travels with the status, and the sandbox
+// prints it as "name: message". Writing to Stderr is left to what a builtin
+// reports while it keeps working, as [walkGuard] does for a refused entry.
 func Register(name string, fn command.RunFunc) { registry[name] = fn }
 
 // Registered reports whether name is a builtin. The sandbox uses it to refuse a

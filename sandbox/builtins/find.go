@@ -25,21 +25,21 @@ func find(_ context.Context, inv *command.Invocation) error {
 		case "-name":
 			i++
 			if i >= len(inv.Args) {
-				return fmt.Errorf("-name requires an argument")
+				return command.Exit(1, "-name requires an argument")
 			}
 			namePat = inv.Args[i]
 		case "-type":
 			i++
 			if i >= len(inv.Args) {
-				return fmt.Errorf("-type requires an argument")
+				return command.Exit(1, "-type requires an argument")
 			}
 			typ = inv.Args[i]
 			if typ != "f" && typ != "d" {
-				return fmt.Errorf("invalid -type %q (want f or d)", typ)
+				return command.Exitf(1, "invalid -type %q (want f or d)", typ)
 			}
 		default:
 			if strings.HasPrefix(a, "-") {
-				return fmt.Errorf("unknown option: %s", a)
+				return command.Exitf(1, "unknown option: %s", a)
 			}
 			roots = append(roots, a)
 		}
@@ -71,12 +71,12 @@ func find(_ context.Context, inv *command.Invocation) error {
 			return nil
 		}))
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 	}
 
 	if guard.refused {
-		return exit(1)
+		return command.Exit(1)
 	}
 	return nil
 }

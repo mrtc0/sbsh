@@ -22,10 +22,10 @@ func cp(_ context.Context, inv *command.Invocation) error {
 	recursive := fs.Bool("-r", "-R")
 	rest, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if len(rest) < 2 {
-		return fmt.Errorf("usage: cp [-r] source... dest")
+		return command.Exit(1, "usage: cp [-r] source... dest")
 	}
 	dst := rest[len(rest)-1]
 	srcs := rest[:len(rest)-1]
@@ -35,7 +35,7 @@ func cp(_ context.Context, inv *command.Invocation) error {
 	dstIsDir := dstErr == nil && dstInfo.IsDir()
 
 	if len(srcs) > 1 && !dstIsDir {
-		return fmt.Errorf("target %q is not a directory", dst)
+		return command.Exitf(1, "target %q is not a directory", dst)
 	}
 
 	guard := &walkGuard{inv: inv}
@@ -46,7 +46,7 @@ func cp(_ context.Context, inv *command.Invocation) error {
 			if guard.skip(err) {
 				continue
 			}
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		target := dstAbs
 		if dstIsDir {
@@ -54,7 +54,7 @@ func cp(_ context.Context, inv *command.Invocation) error {
 		}
 		if info.IsDir() {
 			if !*recursive {
-				return fmt.Errorf("-r not specified; omitting directory %q", s)
+				return command.Exitf(1, "-r not specified; omitting directory %q", s)
 			}
 			// info comes from Stat, so a link to a directory lands here. Walking
 			// the link itself would find one entry and copy nothing, so the walk
@@ -65,16 +65,16 @@ func cp(_ context.Context, inv *command.Invocation) error {
 				if guard.skip(err) {
 					continue
 				}
-				return err
+				return command.Exitf(1, "%v", err)
 			}
 			// A destination inside the source has no end: the walk reads each
 			// directory's entries after the copy has created one there, so the copy
 			// keeps finding more to copy. GNU cp refuses the same case by name.
 			if rel := vfs.Rel(root, target); !path.IsAbs(rel) {
-				return fmt.Errorf("cannot copy a directory, %q, into itself, %q", s, dst)
+				return command.Exitf(1, "cannot copy a directory, %q, into itself, %q", s, dst)
 			}
 			if err := copyTree(inv, guard, root, target); err != nil {
-				return err
+				return command.Exitf(1, "%v", err)
 			}
 			continue
 		}
@@ -82,12 +82,12 @@ func cp(_ context.Context, inv *command.Invocation) error {
 			if guard.skip(err) {
 				continue
 			}
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 	}
 
 	if guard.refused {
-		return exit(1)
+		return command.Exit(1)
 	}
 	return nil
 }

@@ -38,14 +38,14 @@ func sedCommand(_ context.Context, inv *command.Invocation) error {
 	exprFlags := fs.StringList("-e")
 	rest, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	quiet := *quietFlag
 	inPlace := *inPlaceFlag
 	exprs := *exprFlags
 	if len(exprs) == 0 {
 		if len(rest) == 0 {
-			return fmt.Errorf("usage: sed [-n] [-i] [-e script] [script] [file...]")
+			return command.Exit(1, "usage: sed [-n] [-i] [-e script] [script] [file...]")
 		}
 		exprs = append(exprs, rest[0])
 		rest = rest[1:]
@@ -53,7 +53,7 @@ func sedCommand(_ context.Context, inv *command.Invocation) error {
 
 	cmds, err := parseSedScript(strings.Join(exprs, "\n"))
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	files := rest
 
@@ -105,25 +105,27 @@ func sedCommand(_ context.Context, inv *command.Invocation) error {
 	if len(files) == 0 {
 		b, err := readSource(inv, "-")
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		res, err := run("-", b)
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
-		_, err = io.WriteString(inv.Stdout, res)
-		return err
+		if _, err := io.WriteString(inv.Stdout, res); err != nil {
+			return command.Exitf(1, "%v", err)
+		}
+		return nil
 	}
 
 	for _, f := range files {
 		abs := inv.Abs(f)
 		b, err := afero.ReadFile(inv.FS, abs)
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		res, err := run(f, b)
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		if inPlace {
 			mode := os.FileMode(0o644)
@@ -131,12 +133,12 @@ func sedCommand(_ context.Context, inv *command.Invocation) error {
 				mode = fi.Mode()
 			}
 			if err := afero.WriteFile(inv.FS, abs, []byte(res), mode); err != nil {
-				return err
+				return command.Exitf(1, "%v", err)
 			}
 			continue
 		}
 		if _, err := io.WriteString(inv.Stdout, res); err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 	}
 	return nil

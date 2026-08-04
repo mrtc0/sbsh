@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"fmt"
 	"io"
 	"strings"
 
@@ -26,7 +25,7 @@ func gzipCommand(_ context.Context, inv *command.Invocation) error {
 	keepFlag := fs.Bool("-k", "--keep")
 	files, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if *decompress {
 		return gunzipFiles(inv, files, *stdout, *keepFlag)
@@ -37,33 +36,36 @@ func gzipCommand(_ context.Context, inv *command.Invocation) error {
 	if len(files) == 0 {
 		b, err := readSource(inv, "-")
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
-		return writeGzip(inv.Stdout, b)
+		if err := writeGzip(inv.Stdout, b); err != nil {
+			return command.Exitf(1, "%v", err)
+		}
+		return nil
 	}
 
 	for _, f := range files {
 		abs := inv.Abs(f)
 		b, err := afero.ReadFile(inv.FS, abs)
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		if toStdout {
 			if err := writeGzip(inv.Stdout, b); err != nil {
-				return err
+				return command.Exitf(1, "%v", err)
 			}
 			continue
 		}
 		var buf bytes.Buffer
 		if err := writeGzip(&buf, b); err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		if err := afero.WriteFile(inv.FS, abs+".gz", buf.Bytes(), 0o644); err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		if !keep {
 			if err := inv.FS.Remove(abs); err != nil {
-				return err
+				return command.Exitf(1, "%v", err)
 			}
 		}
 	}
@@ -81,7 +83,7 @@ func gunzipCommand(_ context.Context, inv *command.Invocation) error {
 	keep := fs.Bool("-k", "--keep")
 	files, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	return gunzipFiles(inv, files, *stdout, *keep)
 }
@@ -92,7 +94,7 @@ func gunzipCommand(_ context.Context, inv *command.Invocation) error {
 func zcatCommand(_ context.Context, inv *command.Invocation) error {
 	files, err := NewFlagSet().Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	return gunzipFiles(inv, files, true, true)
 }
@@ -101,42 +103,44 @@ func gunzipFiles(inv *command.Invocation, files []string, toStdout, keep bool) e
 	if len(files) == 0 {
 		b, err := readSource(inv, "-")
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		out, err := readGzip(b)
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
-		_, err = inv.Stdout.Write(out)
-		return err
+		if _, err := inv.Stdout.Write(out); err != nil {
+			return command.Exitf(1, "%v", err)
+		}
+		return nil
 	}
 
 	for _, f := range files {
 		abs := inv.Abs(f)
 		b, err := afero.ReadFile(inv.FS, abs)
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		out, err := readGzip(b)
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		if toStdout {
 			if _, err := inv.Stdout.Write(out); err != nil {
-				return err
+				return command.Exitf(1, "%v", err)
 			}
 			continue
 		}
 		if !strings.HasSuffix(abs, ".gz") {
-			return fmt.Errorf("%s: unknown suffix -- ignored", f)
+			return command.Exitf(1, "%s: unknown suffix -- ignored", f)
 		}
 		target := strings.TrimSuffix(abs, ".gz")
 		if err := afero.WriteFile(inv.FS, target, out, 0o644); err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		if !keep {
 			if err := inv.FS.Remove(abs); err != nil {
-				return err
+				return command.Exitf(1, "%v", err)
 			}
 		}
 	}

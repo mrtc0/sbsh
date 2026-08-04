@@ -17,7 +17,7 @@ func wc(_ context.Context, inv *command.Invocation) error {
 	showBytesFlag := fs.Bool("-c")
 	files, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	showLines, showWords, showBytes := *showLinesFlag, *showWordsFlag, *showBytesFlag
 	if !showLines && !showWords && !showBytes {
@@ -49,7 +49,7 @@ func wc(_ context.Context, inv *command.Invocation) error {
 	if len(files) == 0 {
 		b, err := readSource(inv, "-")
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		l, w, c := count(b)
 		emit("", l, w, c)
@@ -60,7 +60,7 @@ func wc(_ context.Context, inv *command.Invocation) error {
 	for _, f := range files {
 		b, err := readSource(inv, f)
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		l, w, c := count(b)
 		totL, totW, totC = totL+l, totW+w, totC+c
