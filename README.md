@@ -158,11 +158,13 @@ sb, err := sandbox.New(ctx,
 		func(_ context.Context, inv *command.Invocation) error {
 			b, err := io.ReadAll(inv.Stdin)
 			if err != nil {
-				return err
+				return command.Exitf(1, "read: %v", err)
 			}
 			slug := strings.Join(strings.Fields(strings.ToLower(string(b))), "-")
-			_, err = fmt.Fprintln(inv.Stdout, slug)
-			return err
+			if _, err := fmt.Fprintln(inv.Stdout, slug); err != nil {
+				return command.Exitf(1, "write: %v", err)
+			}
+			return command.Exit(0)
 		})),
 )
 ```
@@ -188,9 +190,25 @@ which may be piping them into the next command.
 the builtins have. A command that reaches for `os` or `net/http` directly steps
 outside the sandbox, and registering it does not make that safe.
 
-Returning a plain error prints `name: message` on stderr and exits `1`, which is
-what a usage or I/O failure wants. A command with statuses of its own returns
-`command.Exit(code)` instead.
+A command reports back one way, whether it succeeded or not: it returns
+`command.Exit` or `command.Exitf`, picking its own status and attaching a message
+only when the caller should be shown one.
+
+```go
+return command.Exit(0)                     // done, nothing to say
+return command.Exit(1)                     // a status of its own, the way grep reports "no match"
+return command.Exit(2, "too many files")   // prints "name: too many files" on stderr, exits 2
+return command.Exitf(1, "read: %v", err)   // the same, with the message formatted
+```
+
+The message travels with the status, so a command need not write the diagnostic
+it fails on to `inv.Stderr` itself — that is for what it reports while it keeps
+going. Do not wrap the result either: only the message the `ExitError` carries is
+printed, so `fmt.Errorf("bad usage: %w", command.Exit(2))` exits 2 silently. Use
+`command.Exitf` to build the message instead.
+
+Returning any other error is outside the contract. The sandbox has no status to
+go by, so it falls back to printing the error and exiting `1`.
 
 Registration is per sandbox, not process-wide, so two sandboxes in one program
 can offer different commands. It fails at `New` — rather than silently later —
