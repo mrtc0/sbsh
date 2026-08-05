@@ -15,7 +15,7 @@ func ls(_ context.Context, inv *command.Invocation) error {
 	long := fs.Bool("-l")
 	paths, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if len(paths) == 0 {
 		paths = []string{"."}
@@ -23,7 +23,7 @@ func ls(_ context.Context, inv *command.Invocation) error {
 	for _, p := range paths {
 		info, err := inv.FS.Stat(inv.Abs(p))
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		if !info.IsDir() {
 			fmt.Fprintln(inv.Stdout, p)
@@ -31,7 +31,7 @@ func ls(_ context.Context, inv *command.Invocation) error {
 		}
 		entries, err := afero.ReadDir(inv.FS, inv.Abs(p))
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 		for _, e := range entries {

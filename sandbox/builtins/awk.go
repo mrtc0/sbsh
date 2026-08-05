@@ -32,7 +32,7 @@ func awkCommand(ctx context.Context, inv *command.Invocation) error {
 	progFileFlags := fs.StringList("-f")
 	rest, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	fieldSep := *fieldSepFlag
 	haveFS := fs.Seen("-F")
@@ -42,24 +42,24 @@ func awkCommand(ctx context.Context, inv *command.Invocation) error {
 	for _, assignment := range *varFlags {
 		pair, err := parseAwkVar(assignment)
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		vars = append(vars, pair...)
 	}
 
 	src, rest, err := awkProgram(inv, progFiles, rest)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 
 	stdin, err := awkInput(inv, rest)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 
 	prog, err := parser.ParseProgram([]byte(src), nil)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 
 	setVars := make([]string, 0, len(vars)+2)
@@ -82,14 +82,14 @@ func awkCommand(ctx context.Context, inv *command.Invocation) error {
 
 	interpreter, err := goawk.New(prog)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	status, err := interpreter.ExecuteContext(ctx, config)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if status != 0 {
-		return exit(status)
+		return command.Exit(status)
 	}
 	return nil
 }

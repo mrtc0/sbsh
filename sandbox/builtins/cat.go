@@ -9,7 +9,7 @@ import (
 func cat(_ context.Context, inv *command.Invocation) error {
 	paths, err := NewFlagSet().Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if len(paths) == 0 {
 		paths = []string{"-"}
@@ -17,10 +17,10 @@ func cat(_ context.Context, inv *command.Invocation) error {
 	for _, p := range paths {
 		b, err := readSource(inv, p)
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		if _, err := inv.Stdout.Write(b); err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 	}
 	return nil

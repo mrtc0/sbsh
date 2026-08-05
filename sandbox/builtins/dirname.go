@@ -13,7 +13,7 @@ import (
 //	dirname path...
 func dirname(_ context.Context, inv *command.Invocation) error {
 	if len(inv.Args) == 0 {
-		return fmt.Errorf("usage: dirname path...")
+		return command.Exit(1, "usage: dirname path...")
 	}
 	for _, p := range inv.Args {
 		trimmed := stripTrailingSlashes(p)

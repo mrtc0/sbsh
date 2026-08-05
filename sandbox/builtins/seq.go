@@ -21,13 +21,13 @@ func seq(_ context.Context, inv *command.Invocation) error {
 	equalWidthFlag := fs.Bool("-w", "--equal-width")
 	nums, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	sep := *sepFlag
 	equalWidth := *equalWidthFlag
 
 	if len(nums) == 0 || len(nums) > 3 {
-		return fmt.Errorf("usage: seq [-w] [-s sep] [first [step]] last")
+		return command.Exit(1, "usage: seq [-w] [-s sep] [first [step]] last")
 	}
 
 	first, step, last := 1.0, 1.0, 0.0
@@ -46,29 +46,29 @@ func seq(_ context.Context, inv *command.Invocation) error {
 	switch len(nums) {
 	case 1:
 		if last, err = parse(nums[0]); err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 	case 2:
 		if first, err = parse(nums[0]); err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		if last, err = parse(nums[1]); err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 	case 3:
 		if first, err = parse(nums[0]); err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		if step, err = parse(nums[1]); err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		if last, err = parse(nums[2]); err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 	}
 
 	if step == 0 {
-		return fmt.Errorf("step must not be zero")
+		return command.Exit(1, "step must not be zero")
 	}
 
 	values := seqValues(first, step, last)

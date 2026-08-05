@@ -2,7 +2,6 @@ package builtins
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"strings"
 
@@ -26,12 +25,12 @@ func pythonCommand(ctx context.Context, inv *command.Invocation) error {
 	case len(inv.Args) >= 1 && !strings.HasPrefix(inv.Args[0], "-"):
 		data, err := afero.ReadFile(inv.FS, inv.Abs(inv.Args[0]))
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		code = string(data)
 		argv = inv.Args
 	default:
-		return fmt.Errorf("usage: python -c CODE [args...] | python FILE [args...]")
+		return command.Exit(1, "usage: python -c CODE [args...] | python FILE [args...]")
 	}
 
 	res, runErr := inv.Python.Run(ctx, python.Invocation{
@@ -48,17 +47,17 @@ func pythonCommand(ctx context.Context, inv *command.Invocation) error {
 	// expects to see. Write errors (e.g. the output limit is hit) must not be
 	// swallowed either, or truncation would be reported as success.
 	if _, err := io.WriteString(inv.Stdout, res.Stdout); err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if _, err := io.WriteString(inv.Stderr, res.Stderr); err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 
 	if runErr != nil {
-		return runErr
+		return command.Exitf(1, "%v", runErr)
 	}
 	if !res.Ok() {
-		return exit(int(res.ExitCode))
+		return command.Exit(int(res.ExitCode))
 	}
 	return nil
 }

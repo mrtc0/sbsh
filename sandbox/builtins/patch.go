@@ -34,36 +34,36 @@ func patchCommand(_ context.Context, inv *command.Invocation) error {
 	stripFlag := fs.String("0", "-p")
 	operands, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if len(operands) > 0 {
-		return fmt.Errorf("unexpected argument: %q", operands[0])
+		return command.Exitf(1, "unexpected argument: %q", operands[0])
 	}
 	strip, err := strconv.Atoi(*stripFlag)
 	if err != nil {
-		return fmt.Errorf("invalid strip count: %q", *stripFlag)
+		return command.Exitf(1, "invalid strip count: %q", *stripFlag)
 	}
 	data, err := readSource(inv, *patchFileFlag)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 
 	patches, err := parseUnifiedDiff(string(data))
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if len(patches) == 0 {
-		return fmt.Errorf("no unified diff found in input")
+		return command.Exit(1, "no unified diff found in input")
 	}
 
 	actions, err := planPatches(inv, patches, strip)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 
 	for _, a := range actions {
 		if err := a.apply(inv); err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		fmt.Fprintf(inv.Stdout, "patching file %s\n", a.target.display)
 	}

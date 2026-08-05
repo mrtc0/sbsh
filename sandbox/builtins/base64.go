@@ -21,15 +21,15 @@ func base64Command(_ context.Context, inv *command.Invocation) error {
 	wrapFlag := fs.String("76", "-w", "--wrap")
 	files, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	decode := *decodeFlag
 	wrap, err := strconv.Atoi(*wrapFlag)
 	if err != nil {
-		return fmt.Errorf("invalid wrap size: %q", *wrapFlag)
+		return command.Exitf(1, "invalid wrap size: %q", *wrapFlag)
 	}
 	if len(files) > 1 {
-		return fmt.Errorf("usage: base64 [-d] [-w N] [file]")
+		return command.Exit(1, "usage: base64 [-d] [-w N] [file]")
 	}
 	src := "-"
 	if len(files) == 1 {
@@ -37,7 +37,7 @@ func base64Command(_ context.Context, inv *command.Invocation) error {
 	}
 	b, err := readSource(inv, src)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 
 	if decode {
@@ -50,16 +50,20 @@ func base64Command(_ context.Context, inv *command.Invocation) error {
 		}, string(b))
 		out, err := base64.StdEncoding.DecodeString(clean)
 		if err != nil {
-			return fmt.Errorf("invalid input: %w", err)
+			return command.Exitf(1, "invalid input: %v", err)
 		}
-		_, err = inv.Stdout.Write(out)
-		return err
+		if _, err := inv.Stdout.Write(out); err != nil {
+			return command.Exitf(1, "%v", err)
+		}
+		return nil
 	}
 
 	encoded := base64.StdEncoding.EncodeToString(b)
 	if wrap <= 0 {
-		_, err := fmt.Fprintln(inv.Stdout, encoded)
-		return err
+		if _, err := fmt.Fprintln(inv.Stdout, encoded); err != nil {
+			return command.Exitf(1, "%v", err)
+		}
+		return nil
 	}
 	for i := 0; i < len(encoded); i += wrap {
 		end := i + wrap
@@ -67,7 +71,7 @@ func base64Command(_ context.Context, inv *command.Invocation) error {
 			end = len(encoded)
 		}
 		if _, err := fmt.Fprintln(inv.Stdout, encoded[i:end]); err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 	}
 	return nil

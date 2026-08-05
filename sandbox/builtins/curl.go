@@ -3,7 +3,6 @@ package builtins
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -48,20 +47,20 @@ func curl(ctx context.Context, inv *command.Invocation) error {
 
 	operands, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if len(operands) != 1 {
-		return errors.New("usage: curl [options] URL")
+		return command.Exit(1, "usage: curl [options] URL")
 	}
 	if inv.HTTP == nil {
-		return errors.New("network access is not permitted")
+		return command.Exit(1, "network access is not permitted")
 	}
 
 	var body io.Reader
 	if fs.Seen("-d") {
 		payload, err := curlData(inv, *data)
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		body = bytes.NewReader(payload)
 	}
@@ -73,7 +72,7 @@ func curl(ctx context.Context, inv *command.Invocation) error {
 		wantHead: *head,
 	})
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 
 	// A copy so that the redirect choice is this call's alone: the client is
@@ -88,29 +87,34 @@ func curl(ctx context.Context, inv *command.Invocation) error {
 
 	res, err := client.Do(req)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	defer res.Body.Close()
 
 	if *fail && res.StatusCode >= http.StatusBadRequest {
-		fmt.Fprintf(inv.Stderr, "curl: the requested URL returned error: %s\n", res.Status)
-		return exit(curlFailExit)
+		return command.Exitf(curlFailExit, "the requested URL returned error: %s", res.Status)
 	}
 
 	withHeaders := *include || *head
 	if *output == "" {
-		return writeResponse(inv.Stdout, res, withHeaders)
+		if err := writeResponse(inv.Stdout, res, withHeaders); err != nil {
+			return command.Exitf(1, "%v", err)
+		}
+		return nil
 	}
 
 	f, err := inv.FS.OpenFile(inv.Abs(*output), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if err := writeResponse(f, res, withHeaders); err != nil {
 		f.Close()
-		return err
+		return command.Exitf(1, "%v", err)
 	}
-	return f.Close()
+	if err := f.Close(); err != nil {
+		return command.Exitf(1, "%v", err)
+	}
+	return nil
 }
 
 type curlOptions struct {

@@ -23,7 +23,7 @@ func sortCommand(_ context.Context, inv *command.Invocation) error {
 	foldFlag := fs.Bool("-f")
 	files, err := fs.Parse(inv.Args)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	reverse, numeric, unique, fold := *reverseFlag, *numericFlag, *uniqueFlag, *foldFlag
 
@@ -31,14 +31,14 @@ func sortCommand(_ context.Context, inv *command.Invocation) error {
 	if len(files) == 0 {
 		b, err := readSource(inv, "-")
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		lines = splitLines(b)
 	} else {
 		for _, f := range files {
 			b, err := readSource(inv, f)
 			if err != nil {
-				return err
+				return command.Exitf(1, "%v", err)
 			}
 			lines = append(lines, splitLines(b)...)
 		}

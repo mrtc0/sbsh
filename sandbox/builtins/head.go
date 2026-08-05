@@ -13,7 +13,7 @@ import (
 func head(_ context.Context, inv *command.Invocation) error {
 	n, files, err := parseLineCount(inv.Args, 10)
 	if err != nil {
-		return err
+		return command.Exitf(1, "%v", err)
 	}
 	if len(files) == 0 {
 		files = []string{"-"}
@@ -21,7 +21,7 @@ func head(_ context.Context, inv *command.Invocation) error {
 	for idx, f := range files {
 		b, err := readSource(inv, f)
 		if err != nil {
-			return err
+			return command.Exitf(1, "%v", err)
 		}
 		if len(files) > 1 {
 			if idx > 0 {
