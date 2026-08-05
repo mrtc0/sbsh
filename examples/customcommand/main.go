@@ -31,6 +31,9 @@ func (wordFreq) Description() string { return "count word occurrences, most freq
 
 // Run reads each argument as a file in the sandbox filesystem, or standard input
 // when there is no argument or the argument is "-".
+//
+// Every return is a command.Exit or command.Exitf: the command picks its exit
+// status, and attaches a message only when the caller should be shown one.
 func (wordFreq) Run(_ context.Context, inv *command.Invocation) error {
 	counts := map[string]int{}
 
@@ -46,19 +49,21 @@ func (wordFreq) Run(_ context.Context, inv *command.Invocation) error {
 			// working directory.
 			f, err := inv.FS.Open(inv.Abs(name))
 			if err != nil {
-				// A plain error is printed as "wordfreq: ..." and exits 1.
-				return err
+				// A message travels with the status: the sandbox prints it as
+				// "wordfreq: ..." on stderr and the script exits 1.
+				return command.Exitf(1, "%v", err)
 			}
 			defer f.Close()
 			r = f
 		}
 		if err := count(r, counts); err != nil {
-			return err
+			return command.Exitf(1, "%s: %v", name, err)
 		}
 	}
 
 	if len(counts) == 0 {
-		// A status of the command's own, the way grep reports "no match".
+		// A status of the command's own, the way grep reports "no match". No
+		// message: nothing went wrong, so there is nothing to show.
 		return command.Exit(1)
 	}
 
@@ -76,10 +81,14 @@ func (wordFreq) Run(_ context.Context, inv *command.Invocation) error {
 	out := bufio.NewWriter(inv.Stdout)
 	for _, w := range words {
 		if _, err := fmt.Fprintf(out, "%d\t%s\n", counts[w], w); err != nil {
-			return err
+			return command.Exitf(1, "write: %v", err)
 		}
 	}
-	return out.Flush()
+	if err := out.Flush(); err != nil {
+		return command.Exitf(1, "write: %v", err)
+	}
+	// Success is reported the same way as failure: a status, and no message.
+	return command.Exit(0)
 }
 
 func count(r io.Reader, counts map[string]int) error {
@@ -120,10 +129,19 @@ wordfreq /tmp/notes.txt | head -n 3
 	fmt.Printf("exit=%d\n%s", res.ExitCode, res.Stdout)
 
 	// Standard input works the same way, and so does the command's own exit
-	// status: empty input has nothing to count, so wordfreq exits 1.
+	// status: empty input has nothing to count, so wordfreq exits 1 with nothing
+	// on stderr — a status of its own is not a diagnostic.
 	res, err = sb.Exec(ctx, "wordfreq", strings.NewReader(""))
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("empty input: exit=%d\n", res.ExitCode)
+	fmt.Printf("empty input: exit=%d stderr=%q\n", res.ExitCode, res.Stderr)
+
+	// A failure the caller should be told about carries its message with the
+	// status, and the sandbox prints it as "wordfreq: ...".
+	res, err = sb.Exec(ctx, "wordfreq /tmp/missing.txt", nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("missing file: exit=%d stderr=%s", res.ExitCode, res.Stderr)
 }
