@@ -10,6 +10,7 @@ import (
 	"github.com/mrtc0/sh/v3/interp"
 
 	"github.com/mrtc0/sbsh/sandbox/command"
+	"github.com/mrtc0/sbsh/sandbox/exec"
 	"github.com/mrtc0/sbsh/sandbox/python"
 	"github.com/mrtc0/sbsh/vfs"
 )
@@ -94,8 +95,12 @@ func ExecMiddleware(fsys vfs.FS, opts Options) func(next interp.ExecHandlerFunc)
 
 			fn, ok := resolve(args[0], opts)
 			if !ok {
+				// The diagnostic is what a person reads. The error carries the
+				// same fact in a form the sandbox can classify: it is a 127 to the
+				// shell backend, and an [exec.NotFoundError] to whoever collects
+				// the result, which a plain 127 could not be told apart from.
 				fmt.Fprintf(hc.Stderr, "%s: command not found\n", args[0])
-				return interp.ExitStatus(127)
+				return &exec.NotFoundError{Name: args[0]}
 			}
 
 			// The one place the shell's handler context is unpacked: the payload a

@@ -48,8 +48,15 @@ func TestRunner_Run(t *testing.T) {
 			wantExit: 3,
 			wantErr:  "(exit code 3)",
 		},
-		"reports a sandbox error as exit 1": {
+		// Syntax the sandbox refuses is an outcome of the script, so it reads like
+		// any other failing script rather than like the sandbox breaking.
+		"reports refused syntax as the script's own failure": {
 			script:   "cat <(echo hi)", // process substitution is rejected
+			wantExit: 126,
+			wantErr:  "sbsh: process substitution is not allowed in the sandbox",
+		},
+		"reports a request the sandbox cannot run as exit 1": {
+			script:   "if", // does not parse
 			wantExit: 1,
 			wantErr:  "sandbox error:",
 		},

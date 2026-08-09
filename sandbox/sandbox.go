@@ -18,7 +18,7 @@ import (
 	"github.com/mrtc0/sbsh/netpolicy"
 	"github.com/mrtc0/sbsh/sandbox/builtins"
 	"github.com/mrtc0/sbsh/sandbox/command"
-	"github.com/mrtc0/sbsh/sandbox/exitcode"
+	"github.com/mrtc0/sbsh/sandbox/exec"
 	"github.com/mrtc0/sbsh/sandbox/python"
 	"github.com/mrtc0/sbsh/vfs"
 )
@@ -282,18 +282,21 @@ func (s *Sandbox) Close() error {
 	return errors.Join(errs...)
 }
 
-// Result is the result of executing a script in the sandbox.
-type Result struct {
-	Stdout    string
-	Stderr    string
-	ExitCode  int
-	Truncated bool
-}
+// Result is what one execution in the sandbox reports back. It is
+// [exec.Result], the shape the execution result contract defines, and not a
+// shape of Exec's own: an execution a command starts from inside the sandbox
+// reports back with the same one. See [exec.Outcome] for what the fields mean.
+type Result = exec.Result
 
 // Exec interprets and executes a shell script. stdin is the script's standard
 // input; if nil, it will be an empty reader.
-// The returned error indicates a problem with the sandbox itself,
-// while script failures are represented by Result.ExitCode.
+//
+// The result is always populated, and [exec.Result.Outcome] says why the
+// execution ended: a script that failed on its own, a command that did not
+// resolve, syntax the sandbox refused, a timeout or a cancellation, a request
+// that does not parse, or a failure of the sandbox itself. The returned error is
+// non-nil only for the last two — a request the sandbox cannot make sense of and
+// a fault of its own — so a caller reads the outcome either way.
 //
 // A sandbox is a single shell session: the working directory, variables and
 // functions a script leaves behind are still in effect for the next Exec.
@@ -301,10 +304,10 @@ type Result struct {
 func (s *Sandbox) Exec(ctx context.Context, script string, stdin io.Reader) (*Result, error) {
 	file, err := syntax.NewParser().Parse(strings.NewReader(script), "script")
 	if err != nil {
-		return nil, fmt.Errorf("sandbox: parse: %w", err)
+		return exec.Invalid(fmt.Errorf("sandbox: parse: %w", err))
 	}
 	if err := quarantine(file); err != nil {
-		return nil, err
+		return exec.Denied(err.Error()), nil
 	}
 
 	if stdin == nil {
@@ -319,7 +322,7 @@ func (s *Sandbox) Exec(ctx context.Context, script string, stdin io.Reader) (*Re
 	// Applying StdIO to a runner that has already run is how the interpreter
 	// expects streams to be swapped; see the [interp.Runner.Subshell] docs.
 	if err := interp.StdIO(stdin, stdout, stderr)(s.runner); err != nil {
-		return nil, fmt.Errorf("sandbox: standard streams: %w", err)
+		return exec.Internal(fmt.Errorf("sandbox: standard streams: %w", err))
 	}
 
 	if s.timeout > 0 {
@@ -328,37 +331,26 @@ func (s *Sandbox) Exec(ctx context.Context, script string, stdin io.Reader) (*Re
 		defer cancel()
 	}
 
-	res := &Result{}
 	runErr := s.runner.Run(ctx, file)
-	res.Stdout = stdout.String()
-	res.Stderr = stderr.String()
-	res.Truncated = stdout.Truncated() || stderr.Truncated()
-	if runErr == nil {
-		return res, nil
+	out := exec.Output{
+		Stdout:    stdout.String(),
+		Stderr:    stderr.String(),
+		Truncated: stdout.Truncated() || stderr.Truncated(),
 	}
-
-	var exitStatus interp.ExitStatus
-	if errors.As(runErr, &exitStatus) {
-		res.ExitCode = int(exitStatus)
-		return res, nil
+	// The ending is classified by the contract rather than here, so that an
+	// execution started from inside the sandbox is classified the same way.
+	res, err := exec.Finish(ctx, out, runErr)
+	if err != nil {
+		// Finish returns an error only for a failure of the sandbox, so saying
+		// where it happened costs nothing a caller has to unwrap around.
+		return res, fmt.Errorf("sandbox: run script: %w", err)
 	}
-
-	// Neither the timeout nor a cancellation is a failure of the sandbox: both are
-	// limits the caller asked for, so they belong in ExitCode with a nil error, the
-	// same way a non-zero script exit does.
-	switch {
-	case errors.Is(ctx.Err(), context.DeadlineExceeded):
-		res.ExitCode = exitcode.Timeout
-		return res, nil
-	case errors.Is(ctx.Err(), context.Canceled):
-		res.ExitCode = exitcode.Canceled
-		return res, nil
-	}
-
-	return res, fmt.Errorf("failed to run script: %w", runErr)
+	return res, nil
 }
 
-// quarantine rejects shell syntax that relies on host resources.
+// quarantine rejects shell syntax that relies on host resources. The sandbox
+// refuses such a script rather than failing on it, which is why it reports
+// [exec.OutcomeDenied] and not an error of its own.
 func quarantine(file *syntax.File) error {
 	var err error
 	syntax.Walk(file, func(node syntax.Node) bool {

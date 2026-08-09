@@ -110,10 +110,46 @@ func main() {
 }
 ```
 
-`Exec` separates the two kinds of failure. A script that exits non-zero is a
-successful `Exec` with a non-zero `Result.ExitCode`; the returned `error` is
-reserved for the sandbox itself failing — a parse error, or syntax the sandbox
-refuses to run.
+### Execution results
+
+`sandbox.Result` is `exec.Result` from `sandbox/exec`: one shape for every
+execution in the sandbox, so an execution a command starts from inside the
+sandbox reports back the same way a host's `Exec` does.
+
+A result is always populated, including for the endings that come with an
+`error`, and `Result.Outcome` says why the execution ended. Machine meaning lives
+in that field, not in the wording of a stderr line; stderr stays what a person
+reads.
+
+| Outcome | Exit code | Meaning | `error` |
+|---|---|---|---|
+| `OutcomeCompleted` | the request's own | Ran to completion and picked its own status | nil |
+| `OutcomeNotFound` | 127 | The run ended on an unresolved command name | nil |
+| `OutcomeDenied` | 126 | The sandbox refused the request; the reason is on stderr | nil |
+| `OutcomeTimedOut` | 137 | The deadline passed and the run was stopped | nil |
+| `OutcomeCanceled` | 130 | The caller's context was cancelled | nil |
+| `OutcomeInvalid` | 2 | The request could never become a run — a script that does not parse | non-nil |
+| `OutcomeInternal` | 125 | The sandbox itself failed; the status says nothing | non-nil |
+
+An `error` therefore means one of two things only: the request could not be made
+sense of, or the sandbox is at fault. Everything else — a failing script, an
+unknown command, a refusal, a limit the caller asked for — is a normal outcome
+with a nil `error`. `Result.OK()` is the one check for "did this work", and
+`Result.Stopped()` for "a limit ended it".
+
+`Result.Truncated` is independent of the outcome: a run that wrote past the
+output limit still completed, so a caller that must see everything has to treat
+truncation as a failure of its own.
+
+A denial a command runs into while it works — a path `WithDenyPaths` covers, a
+destination the network policy does not allow — is not `OutcomeDenied`. That is
+the command's own failure, reported the way it reports any other: a status and a
+diagnostic. `OutcomeDenied` is for a request the sandbox would not start.
+
+The contract is the shape nested execution will report back with too, which is
+why classification lives in `sandbox/exec` rather than in `Exec`. The package
+documentation states what a nested entry point has to do to stay consistent with
+the top level.
 
 ### Options
 
@@ -301,8 +337,9 @@ covering a subset of the flags its original accepts:
 and lookahead are unavailable.
 
 An unrecognized command prints `command not found` and exits `127`; it is never
-looked up on the host. An unsupported flag is an error rather than a silent
-no-op.
+looked up on the host. A script that ends there reports `OutcomeNotFound`, while
+one that handles it and picks its own status reports that status. An unsupported
+flag is an error rather than a silent no-op.
 
 `tar` and `patch` treat archive and patch member names as untrusted: a leading
 `/` is dropped so the member lands under the extraction root, and a name that
@@ -320,9 +357,10 @@ Per `Exec` call:
 - **Timeout** — 30 seconds by default (`WithTimeout`). A script stopped by it
   reports `128 + SIGKILL` (`137`), and one stopped because the caller cancelled
   the context reports `128 + SIGINT` (`130`), the way a real shell reports a
-  killed process. Both arrive as `Result.ExitCode` with a nil error, so the caller
-  can tell "stopped" from "failed on its own" without treating a limit it asked
-  for as a sandbox failure.
+  killed process. Both arrive as `Result.ExitCode` with a nil error, and as
+  `OutcomeTimedOut` / `OutcomeCanceled`, so the caller can tell "stopped" from
+  "failed on its own" without treating a limit it asked for as a sandbox
+  failure.
 - **Output** — stdout and stderr are captured in memory and capped at 4 MiB each
   by default (`WithOutputLimit`, or `--output-limit` on the CLI). Past the cap,
   output is discarded and `Result.Truncated` is set; the REPL says so on stderr.
