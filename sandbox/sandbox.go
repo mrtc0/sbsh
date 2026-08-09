@@ -283,17 +283,24 @@ func (s *Sandbox) Close() error {
 }
 
 // Result is the result of executing a script in the sandbox.
-type Result struct {
-	Stdout    string
-	Stderr    string
-	ExitCode  int
-	Truncated bool
-}
+//
+// It is an alias rather than a type of its own: a child execution started from
+// inside the sandbox produces the same thing, and a result that had to be
+// translated between the two would be a result whose meaning depended on where
+// it came from. See [command.ExecutionResult] for the fields and for what the
+// accompanying error does and does not cover.
+type Result = command.ExecutionResult
 
 // Exec interprets and executes a shell script. stdin is the script's standard
 // input; if nil, it will be an empty reader.
-// The returned error indicates a problem with the sandbox itself,
-// while script failures are represented by Result.ExitCode.
+//
+// How the script went is in the [Result], all of it: the exit status, and also
+// whether a command name did not resolve, whether the sandbox refused the script
+// outright, and whether it was stopped rather than allowed to finish. The
+// returned error is about the sandbox, not the script — it accompanies a refused
+// script and a runtime failure, both of which are in the Result too, and it is
+// the only thing returned for a script that does not parse, which never became
+// an execution at all.
 //
 // A sandbox is a single shell session: the working directory, variables and
 // functions a script leaves behind are still in effect for the next Exec.
@@ -303,8 +310,10 @@ func (s *Sandbox) Exec(ctx context.Context, script string, stdin io.Reader) (*Re
 	if err != nil {
 		return nil, fmt.Errorf("sandbox: parse: %w", err)
 	}
+	res := &Result{}
 	if err := quarantine(file); err != nil {
-		return nil, err
+		denied(res, err)
+		return res, err
 	}
 
 	if stdin == nil {
@@ -328,34 +337,73 @@ func (s *Sandbox) Exec(ctx context.Context, script string, stdin io.Reader) (*Re
 		defer cancel()
 	}
 
-	res := &Result{}
+	ctx, unresolved := command.WithUnresolvedRecorder(ctx)
+
 	runErr := s.runner.Run(ctx, file)
 	res.Stdout = stdout.String()
 	res.Stderr = stderr.String()
 	res.Truncated = stdout.Truncated() || stderr.Truncated()
+	_, res.CommandNotFound = unresolved()
+	normalizeOutcome(ctx, res, runErr)
+
+	// Neither a timeout nor a cancellation is a failure of the sandbox: both are
+	// limits the caller asked for, and the Result says so. Only the runtime
+	// coming apart is something the host has to be told about as an error.
+	if res.InternalError != "" {
+		return res, fmt.Errorf("failed to run script: %w", runErr)
+	}
+	return res, nil
+}
+
+// denied fills in a result for a script the sandbox refused before running it.
+// Both entry points use it, so that "nothing ran, and here is why" reads the
+// same whether a host asked or a command did.
+func denied(res *command.ExecutionResult, err error) {
+	res.Denied = true
+	res.DenialReason = err.Error()
+	res.ExitCode = exitcode.Denied
+	res.Stderr = "sbsh: " + err.Error() + "\n"
+}
+
+// normalizeOutcome turns whatever the interpreter returned into the result's
+// fields, so that a caller reads one shape whether the script exited on its own,
+// was stopped, or the runtime came apart under it. It is shared by every
+// execution: a child that reported its outcome by different rules than its
+// parent would be the one thing a single result type could not paper over.
+//
+// A stop is decided before an exit status is read, and on the context rather
+// than on what came back. Being stopped is the fact a caller most needs, and it
+// is the one the shell backend is least obliged to preserve: it may report a
+// deadline as its own error today and as a wrapped exit status tomorrow, and
+// either way TimedOut and Canceled have to stay true. The cost is that a script
+// exiting at the very moment its deadline passes is reported as stopped rather
+// than by the status it happened to reach, which is the reading worth keeping.
+func normalizeOutcome(ctx context.Context, res *command.ExecutionResult, runErr error) {
+	// A run that finished cleanly is not reconsidered: a context that expires
+	// just after the last command would otherwise turn a success into a timeout.
 	if runErr == nil {
-		return res, nil
+		return
+	}
+
+	switch {
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		res.TimedOut = true
+		res.ExitCode = exitcode.Timeout
+		return
+	case errors.Is(ctx.Err(), context.Canceled):
+		res.Canceled = true
+		res.ExitCode = exitcode.Canceled
+		return
 	}
 
 	var exitStatus interp.ExitStatus
 	if errors.As(runErr, &exitStatus) {
 		res.ExitCode = int(exitStatus)
-		return res, nil
+		return
 	}
 
-	// Neither the timeout nor a cancellation is a failure of the sandbox: both are
-	// limits the caller asked for, so they belong in ExitCode with a nil error, the
-	// same way a non-zero script exit does.
-	switch {
-	case errors.Is(ctx.Err(), context.DeadlineExceeded):
-		res.ExitCode = exitcode.Timeout
-		return res, nil
-	case errors.Is(ctx.Err(), context.Canceled):
-		res.ExitCode = exitcode.Canceled
-		return res, nil
-	}
-
-	return res, fmt.Errorf("failed to run script: %w", runErr)
+	res.InternalError = runErr.Error()
+	res.ExitCode = 1
 }
 
 // quarantine rejects shell syntax that relies on host resources.

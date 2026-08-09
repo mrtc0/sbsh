@@ -14,6 +14,8 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/exitcode"
 )
 
 // fsAssertion verifies the state of the sandbox filesystem after a script runs.
@@ -793,4 +795,89 @@ func TestNew_initFS(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestExecResultSaysWhyItEnded covers the fields beside ExitCode. They are what
+// makes one result shape usable from both sides of the sandbox boundary, so a
+// host reading them has to get the same answers a nested caller would.
+func TestExecResultSaysWhyItEnded(t *testing.T) {
+	t.Parallel()
+
+	newSandbox := func(t *testing.T, opts ...Option) *Sandbox {
+		t.Helper()
+		sb, err := New(t.Context(), opts...)
+		require.NoError(t, err)
+		t.Cleanup(func() { sb.Close() })
+		return sb
+	}
+
+	t.Run("a refused script reports the refusal and never runs", func(t *testing.T) {
+		t.Parallel()
+		sb := newSandbox(t)
+
+		res, err := sb.Exec(t.Context(), "cat <(echo hi)", nil)
+
+		// The error is for the host, the result for anyone reading the same
+		// fields a nested caller would. Both, not one or the other.
+		require.Error(t, err)
+		require.NotNil(t, res, "a refused script still has a result to report")
+		assert.True(t, res.Denied)
+		assert.Contains(t, res.DenialReason, "process substitution")
+		assert.Contains(t, res.Stderr, "process substitution")
+		assert.Equal(t, exitcode.Denied, res.ExitCode)
+		assert.Empty(t, res.Stdout, "the script never ran")
+	})
+
+	t.Run("an unresolved command name is not just a 127", func(t *testing.T) {
+		t.Parallel()
+		sb := newSandbox(t)
+
+		res, err := sb.Exec(t.Context(), "definitely_not_a_command", nil)
+
+		require.NoError(t, err)
+		assert.True(t, res.CommandNotFound)
+		assert.Equal(t, 127, res.ExitCode)
+	})
+
+	t.Run("a deliberate 127 is not a missing command", func(t *testing.T) {
+		t.Parallel()
+		sb := newSandbox(t)
+
+		res, err := sb.Exec(t.Context(), "exit 127", nil)
+
+		require.NoError(t, err)
+		assert.False(t, res.CommandNotFound)
+		assert.Equal(t, 127, res.ExitCode)
+	})
+
+	t.Run("a script stopped by the timeout says so", func(t *testing.T) {
+		t.Parallel()
+		sb := newSandbox(t, WithTimeout(200*time.Millisecond))
+
+		res, err := sb.Exec(t.Context(), "while true; do :; done", nil)
+
+		require.NoError(t, err, "a deadline is a limit the caller asked for")
+		assert.True(t, res.TimedOut)
+		assert.False(t, res.Canceled)
+		assert.Equal(t, exitcode.Timeout, res.ExitCode)
+	})
+
+	t.Run("a cancelled script says so", func(t *testing.T) {
+		t.Parallel()
+		sb := newSandbox(t, WithTimeout(30*time.Second))
+
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		go func() {
+			time.Sleep(200 * time.Millisecond)
+			cancel()
+		}()
+
+		res, err := sb.Exec(ctx, "while true; do :; done", nil)
+
+		require.NoError(t, err)
+		assert.True(t, res.Canceled)
+		assert.False(t, res.TimedOut)
+		assert.Equal(t, exitcode.Canceled, res.ExitCode)
+	})
 }
