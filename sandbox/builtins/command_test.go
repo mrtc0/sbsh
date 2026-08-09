@@ -19,6 +19,7 @@ import (
 	"github.com/mrtc0/sbsh/vfs"
 
 	"github.com/mrtc0/sbsh/sandbox/command"
+	"github.com/mrtc0/sbsh/sandbox/exec"
 )
 
 func NewTestEnv(t *testing.T, dir string) (*command.Invocation, *bytes.Buffer, *bytes.Buffer) {
@@ -354,6 +355,77 @@ func TestExecMiddleware(t *testing.T) {
 			assert.Equal(t, tc.wantNextCalled, res.nextCalled, "next (real exec) must not be reached")
 		})
 	}
+}
+
+// nestedSpy is a [command.NestedExecutor] that records the script it was asked
+// to run, standing in for the child-execution runtime.
+type nestedSpy struct{ script string }
+
+func (s *nestedSpy) Run(_ context.Context, req command.NestedRequest) (*exec.Result, error) {
+	s.script = req.Script
+	return &exec.Result{Stdout: "from the child\n"}, nil
+}
+
+func TestExecMiddlewareInstallsTheNestedExecutorPerInvocation(t *testing.T) {
+	t.Parallel()
+
+	spy := &nestedSpy{}
+	var gotName, gotDir string
+	opts := Options{
+		Nested: func(_ context.Context, inv *command.Invocation) command.NestedExecutor {
+			// The hook sees the invocation, which is what lets a child start
+			// from where the command stands.
+			gotName, gotDir = inv.Name, inv.Dir
+			return spy
+		},
+		Commands: map[string]command.Command{
+			"test_nested": command.New("test_nested", "runs a nested script",
+				func(ctx context.Context, inv *command.Invocation) error {
+					res, err := inv.RunNested(ctx, command.NestedRequest{Script: "echo hi"})
+					if err != nil {
+						return command.Exitf(1, "%v", err)
+					}
+					fmt.Fprint(inv.Stdout, res.Stdout)
+					return command.Exit(res.ExitCode)
+				}),
+		},
+	}
+
+	dir := t.TempDir()
+	res := runScript(t, vfs.NewVFS(afero.NewMemMapFs()), opts, dir, "test_nested")
+
+	assert.Equal(t, "from the child\n", res.stdout)
+	assert.Equal(t, uint8(0), res.exit)
+	assert.Equal(t, "echo hi", spy.script)
+	assert.Equal(t, "test_nested", gotName)
+	assert.Equal(t, dir, gotDir)
+}
+
+func TestExecMiddlewareLeavesNestedExecutionUnavailableByDefault(t *testing.T) {
+	t.Parallel()
+
+	// Without the hook a command still gets an answer rather than a panic: the
+	// sandbox offers no nested execution, which the contract calls a denial.
+	var got *exec.Result
+	opts := Options{
+		Commands: map[string]command.Command{
+			"test_nested": command.New("test_nested", "runs a nested script",
+				func(ctx context.Context, inv *command.Invocation) error {
+					res, err := inv.RunNested(ctx, command.NestedRequest{Script: "echo hi"})
+					if err != nil {
+						return command.Exitf(1, "%v", err)
+					}
+					got = res
+					return command.Exit(0)
+				}),
+		},
+	}
+
+	res := runScript(t, vfs.NewVFS(afero.NewMemMapFs()), opts, t.TempDir(), "test_nested")
+
+	assert.Equal(t, uint8(0), res.exit)
+	require.NotNil(t, got)
+	assert.Equal(t, exec.OutcomeDenied, got.Outcome)
 }
 
 func TestShellEnviron(t *testing.T) {
