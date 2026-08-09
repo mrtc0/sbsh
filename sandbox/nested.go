@@ -89,7 +89,7 @@ func (e *nestedExecutor) Run(ctx context.Context, req command.NestedRequest) (*e
 	if res != nil || err != nil {
 		return res, err
 	}
-	env, err := childEnv(e.env, req.Env)
+	env, err := childEnv(e.env, req.Env, dir)
 	if err != nil {
 		return exec.Invalid(fmt.Errorf("sandbox: nested environment: %w", err))
 	}
@@ -165,16 +165,31 @@ func (e *nestedExecutor) childDir(reqDir string) (string, *exec.Result, error) {
 }
 
 // childEnv layers the request's variables on top of what the caller sees, so a
-// request states what it cares about rather than the whole environment.
-func childEnv(inherited, overrides []string) ([]string, error) {
-	env := make([]string, 0, len(inherited)+len(overrides))
-	env = append(env, inherited...)
+// request states what it cares about rather than the whole environment, and
+// then makes the result agree with dir, where the child actually starts.
+//
+// The two directory variables are the sandbox's to set, not the caller's to
+// pass on. A child that starts somewhere else than the caller stands would
+// otherwise inherit a PWD naming the caller's directory, and OLDPWD is the
+// caller's own history: inheriting it would let "cd -" in a child jump to a
+// directory the child has never been in.
+func childEnv(inherited, overrides []string, dir string) ([]string, error) {
+	env := make([]string, 0, len(inherited)+len(overrides)+1)
+	for _, kv := range inherited {
+		if name, _, _ := strings.Cut(kv, "="); name == "PWD" || name == "OLDPWD" {
+			continue
+		}
+		env = append(env, kv)
+	}
 	for _, kv := range overrides {
 		name, _, ok := strings.Cut(kv, "=")
 		if !ok || name == "" {
 			return nil, fmt.Errorf("%q is not a NAME=value pair", kv)
 		}
+		if name == "PWD" || name == "OLDPWD" {
+			continue
+		}
 		env = append(env, kv)
 	}
-	return env, nil
+	return append(env, "PWD="+dir), nil
 }

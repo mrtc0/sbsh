@@ -141,6 +141,64 @@ func TestNestedRunResolvesARequestedDirectory(t *testing.T) {
 	}
 }
 
+func TestNestedRunAgreesWithItselfAboutWhereItIs(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		req  command.NestedRequest
+		want string
+	}{
+		{
+			name: "where the caller stands",
+			req:  command.NestedRequest{Script: `echo "$(pwd) $PWD"`},
+			want: "/work /work\n",
+		},
+		{
+			name: "in a requested directory",
+			req:  command.NestedRequest{Script: `echo "$(pwd) $PWD"`, Dir: "sub"},
+			want: "/work/sub /work/sub\n",
+		},
+		{
+			// PWD says where the child runs, so a request cannot make it say
+			// otherwise.
+			name: "with PWD asked for by the request",
+			req:  command.NestedRequest{Script: `echo "$(pwd) $PWD"`, Env: []string{"PWD=/tmp"}},
+			want: "/work /work\n",
+		},
+		{
+			name: "after the child changes directory",
+			req:  command.NestedRequest{Script: `cd sub; echo "$(pwd) $PWD"`},
+			want: "/work/sub /work/sub\n",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			p := &nestedProbe{build: func(*command.Invocation) command.NestedRequest { return tc.req }}
+			res := runProbe(t, p, "mkdir -p /work/sub && cd /work && probe")
+
+			require.NoError(t, p.err)
+			assert.Equal(t, tc.want, res.Stdout)
+		})
+	}
+}
+
+func TestNestedRunDoesNotInheritTheCallersPreviousDirectory(t *testing.T) {
+	t.Parallel()
+
+	// The caller has been to /tmp, so its OLDPWD names it. A child that
+	// inherited that could "cd -" its way into a directory it was never in.
+	p := &nestedProbe{build: func(*command.Invocation) command.NestedRequest {
+		return command.NestedRequest{Script: `echo "old=[$OLDPWD]"; cd sub; cd -; echo "$(pwd) $PWD"`}
+	}}
+	res := runProbe(t, p, "mkdir -p /work/sub && cd /tmp && cd /work && probe")
+
+	require.NoError(t, p.err)
+	assert.Equal(t, "old=[]\n/work\n/work /work\n", res.Stdout)
+}
+
 func TestNestedRunRejectsADirectoryThatIsNotThere(t *testing.T) {
 	t.Parallel()
 

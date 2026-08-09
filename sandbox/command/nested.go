@@ -60,6 +60,9 @@ type NestedRequest struct {
 	// Env are "NAME=value" pairs layered on top of the environment the caller
 	// sees, so a request sets what it cares about rather than restating the
 	// whole environment. A name already set is overridden for the child alone.
+	//
+	// PWD and OLDPWD are the exception: they describe where the child runs, so
+	// the sandbox sets them from Dir and an entry naming either is dropped.
 	Env []string
 
 	// Timeout bounds the child on top of whatever time the caller's own
