@@ -51,6 +51,16 @@ type Options struct {
 	// the two sets of names disjoint, so which is consulted first is not
 	// observable.
 	Commands map[string]command.Command
+
+	// Nested builds the executor a command reaches nested execution through. It
+	// is asked per invocation rather than held once, because what a child
+	// inherits — where the command stands, what it can see — is a property of
+	// the call and not of the sandbox.
+	//
+	// It is nil, and so is the executor it may return, when the sandbox offers
+	// no nested execution. [command.Invocation.RunNested] answers for that, so
+	// nothing here has to.
+	Nested func(ctx context.Context, inv *command.Invocation) command.NestedExecutor
 }
 
 var registry = map[string]command.RunFunc{}
@@ -116,6 +126,11 @@ func ExecMiddleware(fsys vfs.FS, opts Options) func(next interp.ExecHandlerFunc)
 				HTTP:   opts.HTTP,
 				Python: opts.Python,
 				Env:    NewEnviron(hc.Env),
+			}
+			// After the invocation is built: the executor is handed the payload
+			// so that a child starts from where this command stands.
+			if opts.Nested != nil {
+				inv.Nested = opts.Nested(ctx, inv)
 			}
 			if err := fn(ctx, inv); err != nil {
 				// The single seam between a builtin's int exit code and the

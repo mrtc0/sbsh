@@ -17,9 +17,11 @@
 //
 // # What the contract asks of a nested entry point
 //
-// Only the top-level entry point exists so far; the rest of nested execution is
-// being built. What is settled here is what a nested entry point has to do, so
-// that a caller cannot tell the two apart by what it is handed:
+// The nested entry point a command calls is
+// [github.com/mrtc0/sbsh/sandbox/command.Invocation.RunNested], and what runs
+// behind it is still being built. What is settled here is what a nested entry
+// point has to do, so that a caller cannot tell the two apart by what it is
+// handed:
 //
 //   - End through [Finish], with the context the request ran under. A limit stays
 //     the one the caller asked for: a nested run under its parent's deadline
