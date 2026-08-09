@@ -375,6 +375,45 @@ func TestShellEnviron(t *testing.T) {
 	assert.ElementsMatch(t, []string{"NAME=value", "EMPTY="}, inv.All())
 }
 
+// mixedEnviron reports one exported variable, one merely set, and one exported
+// array — which Exported still has to leave out, having no single value.
+type mixedEnviron struct{ expand.Environ }
+
+func (mixedEnviron) Get(name string) expand.Variable {
+	switch name {
+	case "EXPORTED":
+		return expand.Variable{Set: true, Exported: true, Kind: expand.String, Str: "yes"}
+	case "PLAIN":
+		return expand.Variable{Set: true, Kind: expand.String, Str: "no"}
+	case "EXPORTED_ARR":
+		return expand.Variable{Set: true, Exported: true, Kind: expand.Indexed, List: []string{"a"}}
+	}
+	return expand.Variable{}
+}
+
+func (e mixedEnviron) Each(fn func(name string, vr expand.Variable) bool) {
+	for _, name := range []string{"EXPORTED", "PLAIN", "EXPORTED_ARR"} {
+		if !fn(name, e.Get(name)) {
+			return
+		}
+	}
+}
+
+// TestShellEnviron_Exported covers what a nested execution inherits: the shell's
+// exported variables, which is a narrower set than everything a command can see.
+func TestShellEnviron_Exported(t *testing.T) {
+	t.Parallel()
+
+	env := NewEnviron(mixedEnviron{expand.ListEnviron()})
+
+	exported, ok := env.(command.ExportedEnviron)
+	require.True(t, ok, "the sandbox environment must report its exported variables")
+
+	assert.Equal(t, []string{"EXPORTED=yes"}, exported.Exported())
+	assert.ElementsMatch(t, []string{"EXPORTED=yes", "PLAIN=no"}, env.All(),
+		"All still reports everything a command can see")
+}
+
 // arrayEnviron reports ARR as an array variable, which has no single value to
 // render, alongside a plain string.
 type arrayEnviron struct{ expand.Environ }

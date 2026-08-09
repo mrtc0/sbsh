@@ -68,4 +68,13 @@ type ExecutionResult struct {
 	// which is neither a script failure nor a limit anybody asked for. It is
 	// empty in every ordinary outcome.
 	InternalError string
+
+	// ExecutionID identifies this execution within the sandbox,
+	// ParentExecutionID names the execution it hangs off, and Depth is how far
+	// from the top-level script it ran. A script a host started is a root: it
+	// has an id, no parent, and depth 0. They are what makes a tree of nested
+	// executions readable in a log or a test.
+	ExecutionID       string
+	ParentExecutionID string
+	Depth             int
 }

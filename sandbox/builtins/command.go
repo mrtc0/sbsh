@@ -28,9 +28,19 @@ func (s shellEnviron) Lookup(name string) (string, bool) {
 	return vr.Str, true
 }
 
-func (s shellEnviron) All() []string {
+func (s shellEnviron) All() []string { return s.pairs(false) }
+
+// Exported implements [command.ExportedEnviron]. It is what a nested execution
+// inherits, so that a child shell starts with what a child shell would: the
+// variables the parent exported, and not the ones it merely set.
+func (s shellEnviron) Exported() []string { return s.pairs(true) }
+
+func (s shellEnviron) pairs(exportedOnly bool) []string {
 	var out []string
 	s.env.Each(func(name string, vr expand.Variable) bool {
+		if exportedOnly && !vr.Exported {
+			return true
+		}
 		if vr.IsSet() && vr.Kind == expand.String {
 			out = append(out, name+"="+vr.Str)
 		}
