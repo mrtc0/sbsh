@@ -117,6 +117,10 @@ func installTestCommands(t *testing.T) {
 		return command.Exit(3)
 	}
 
+	replacement["test_exit_zero"] = func(_ context.Context, _ *command.Invocation) error {
+		return command.Exit(0)
+	}
+
 	replacement["test_exit_big"] = func(_ context.Context, _ *command.Invocation) error {
 		return command.Exit(300)
 	}
@@ -239,6 +243,13 @@ func TestExecMiddleware(t *testing.T) {
 			script:     "test_fail",
 			wantStderr: "test_fail: boom\n",
 			wantExit:   1,
+		},
+		// The shell backend treats a zero status carried by an error as a
+		// contradiction and panics on it, so the dispatcher has to hand it back
+		// as plain success.
+		"an exit with a zero code is success": {
+			script:   "test_exit_zero",
+			wantExit: 0,
 		},
 		"an exit without a message is silent": {
 			script:   "test_exit",
