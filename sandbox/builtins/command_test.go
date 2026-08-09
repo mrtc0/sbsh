@@ -121,6 +121,22 @@ func installTestCommands(t *testing.T) {
 		return command.Exit(300)
 	}
 
+	replacement["test_exit_zero"] = func(_ context.Context, _ *command.Invocation) error {
+		return command.Exit(0)
+	}
+
+	replacement["test_exit_zero_msg"] = func(_ context.Context, _ *command.Invocation) error {
+		return command.Exit(0, "just so you know")
+	}
+
+	replacement["test_exit_zero_wrapped"] = func(_ context.Context, _ *command.Invocation) error {
+		return fmt.Errorf("wrapped: %w", command.Exit(0))
+	}
+
+	replacement["test_exit_zero_modulo"] = func(_ context.Context, _ *command.Invocation) error {
+		return command.Exit(256)
+	}
+
 	replacement["test_exit_msg"] = func(_ context.Context, _ *command.Invocation) error {
 		return command.Exit(2, "bad usage")
 	}
@@ -257,6 +273,31 @@ func TestExecMiddleware(t *testing.T) {
 		"a wrapped message-less exit stays silent": {
 			script:   "test_exit_wrapped_silent",
 			wantExit: 3,
+		},
+		// Exit(0) is the normal return path, so it must reach the shell as
+		// plain success rather than as a zero-valued backend exit status,
+		// which is a non-nil error the backend cannot represent.
+		"an exit of zero is success": {
+			script:   "test_exit_zero",
+			wantExit: 0,
+		},
+		"an exit of zero still prints the message it carries": {
+			script:     "test_exit_zero_msg",
+			wantStderr: "test_exit_zero_msg: just so you know\n",
+			wantExit:   0,
+		},
+		"a wrapped exit of zero is success": {
+			script:   "test_exit_zero_wrapped",
+			wantExit: 0,
+		},
+		"an exit code reducing to zero is success": {
+			script:   "test_exit_zero_modulo", // 256 mod 256
+			wantExit: 0,
+		},
+		"an exit of zero keeps a following command running": {
+			script:     "test_exit_zero && test_echo after",
+			wantStdout: "after\n",
+			wantExit:   0,
 		},
 		"an out-of-range exit code is reduced modulo 256": {
 			script:   "test_exit_big",
