@@ -324,6 +324,62 @@ func TestNestedRunEnvOverride(t *testing.T) {
 	}
 }
 
+func TestNestedRunCommandNotFound(t *testing.T) {
+	t.Parallel()
+	s, n := newNestSandbox(t)
+
+	execOK(t, s, `nest 'nosuchcommand'`)
+
+	child := n.only(t)
+	if !child.CommandNotFound {
+		t.Error("CommandNotFound = false, want true")
+	}
+	if child.ExitCode != 127 {
+		t.Errorf("exit code = %d, want 127", child.ExitCode)
+	}
+}
+
+// TestNestedRunExit127IsNotNotFound is the other half: the flag has to mean more
+// than the status, or it would tell a caller nothing it did not already know.
+func TestNestedRunExit127IsNotNotFound(t *testing.T) {
+	t.Parallel()
+	s, n := newNestSandbox(t)
+
+	execOK(t, s, `nest 'exit 127'`)
+
+	child := n.only(t)
+	if child.CommandNotFound {
+		t.Error("CommandNotFound = true for a script that exited 127 on purpose")
+	}
+	if child.ExitCode != 127 {
+		t.Errorf("exit code = %d, want 127", child.ExitCode)
+	}
+}
+
+func TestNestedRunDenied(t *testing.T) {
+	t.Parallel()
+	s, n := newNestSandbox(t)
+
+	execOK(t, s, `nest 'cat <(echo hi)'`)
+
+	child := n.only(t)
+	if !child.Denied {
+		t.Error("Denied = false, want true")
+	}
+	if child.ExitCode != exitcode.Denied {
+		t.Errorf("exit code = %d, want %d", child.ExitCode, exitcode.Denied)
+	}
+	if !strings.Contains(child.DenialReason, "process substitution") {
+		t.Errorf("DenialReason = %q, want it to say why", child.DenialReason)
+	}
+	if !strings.Contains(child.Stderr, child.DenialReason) {
+		t.Errorf("stderr = %q, want it to carry the reason %q", child.Stderr, child.DenialReason)
+	}
+	if child.Stdout != "" {
+		t.Errorf("stdout = %q, want empty: the script never ran", child.Stdout)
+	}
+}
+
 func TestNestedRunOutputLimitClampsToParent(t *testing.T) {
 	t.Parallel()
 

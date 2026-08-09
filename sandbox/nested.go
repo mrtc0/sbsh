@@ -95,6 +95,17 @@ func (e *nestedExecutor) Run(ctx context.Context, req command.NestedRunRequest) 
 		Depth:             child.depth,
 	}
 
+	// A script the sandbox refuses is a denial, not a failure of the script: it
+	// never ran. Reporting it in the result rather than as an error keeps it in
+	// the same shape as every other outcome the caller has to branch on.
+	if err := quarantine(file); err != nil {
+		res.Denied = true
+		res.DenialReason = err.Error()
+		res.ExitCode = exitcode.Denied
+		res.Stderr = "sbsh: " + err.Error() + "\n"
+		return res, nil
+	}
+
 	// context.WithTimeout is what clamps the child's deadline: it keeps whichever
 	// of the two comes first, so a request can only bring the parent's budget
 	// closer, never push it out.
@@ -104,6 +115,7 @@ func (e *nestedExecutor) Run(ctx context.Context, req command.NestedRunRequest) 
 		defer cancel()
 	}
 	ctx = withExecution(ctx, child)
+	ctx, unresolved := command.WithUnresolvedRecorder(ctx)
 
 	stdout := newCapWriter(child.outputLimit)
 	stderr := newCapWriter(child.outputLimit)
@@ -118,6 +130,7 @@ func (e *nestedExecutor) Run(ctx context.Context, req command.NestedRunRequest) 
 	res.Stdout = stdout.String()
 	res.Stderr = stderr.String()
 	res.Truncated = stdout.Truncated() || stderr.Truncated()
+	_, res.CommandNotFound = unresolved()
 	normalizeNested(ctx, res, runErr)
 	return res, nil
 }

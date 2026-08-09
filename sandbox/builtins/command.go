@@ -111,6 +111,10 @@ func ExecMiddleware(fsys vfs.FS, opts Options) func(next interp.ExecHandlerFunc)
 
 			fn, ok := resolve(args[0], opts)
 			if !ok {
+				// Recorded as well as printed: a nested execution reports
+				// "command not found" as its own field, and a script may exit
+				// 127 of its own accord.
+				command.RecordUnresolved(ctx, args[0])
 				fmt.Fprintf(hc.Stderr, "%s: command not found\n", args[0])
 				return interp.ExitStatus(127)
 			}
