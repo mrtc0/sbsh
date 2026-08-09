@@ -121,6 +121,15 @@ func installTestCommands(t *testing.T) {
 		return command.Exit(0)
 	}
 
+	replacement["test_nested"] = func(_ context.Context, inv *command.Invocation) error {
+		if inv.Nested == nil {
+			fmt.Fprintln(inv.Stdout, "nil")
+			return nil
+		}
+		fmt.Fprintln(inv.Stdout, "executor")
+		return nil
+	}
+
 	replacement["test_exit_big"] = func(_ context.Context, _ *command.Invocation) error {
 		return command.Exit(300)
 	}
@@ -212,6 +221,14 @@ func runScript(t *testing.T, fs vfs.FS, opts Options, dir, script string) runRes
 	return res
 }
 
+// stubNested stands in for the runtime's executor: the dispatcher only has to
+// pass one along, so what it would run does not matter here.
+type stubNested struct{}
+
+func (stubNested) Run(context.Context, command.NestedRunRequest) (*command.ExecutionResult, error) {
+	return &command.ExecutionResult{}, nil
+}
+
 func TestExecMiddleware(t *testing.T) {
 	t.Parallel()
 	installTestCommands(t)
@@ -250,6 +267,15 @@ func TestExecMiddleware(t *testing.T) {
 		"an exit with a zero code is success": {
 			script:   "test_exit_zero",
 			wantExit: 0,
+		},
+		"a command is handed the nested executor when one is configured": {
+			opts:       Options{Nested: func(context.Context, *command.Invocation) command.NestedExecutor { return stubNested{} }},
+			script:     "test_nested",
+			wantStdout: "executor\n",
+		},
+		"Invocation.Nested is nil when no executor is configured": {
+			script:     "test_nested",
+			wantStdout: "nil\n",
 		},
 		"an exit without a message is silent": {
 			script:   "test_exit",
