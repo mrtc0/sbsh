@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/mrtc0/sh/v3/expand"
@@ -47,9 +48,16 @@ type Sandbox struct {
 	// WithCommand.
 	commands map[string]command.Command
 
-	// mu serializes Exec, which shares runner across calls.
+	// mu is admission control for top-level runs: Exec shares runner across
+	// calls, so only one may be in flight at a time. It says nothing about
+	// nested execution, which happens inside a call that already holds it — see
+	// [command.NestedExecutor].
 	mu     sync.Mutex
 	runner *interp.Runner
+
+	// executions counts the executions the sandbox has started, top-level and
+	// nested alike, so that each gets an id of its own.
+	executions atomic.Uint64
 }
 
 type Option func(*Sandbox) error
@@ -192,7 +200,7 @@ func New(ctx context.Context, opts ...Option) (*Sandbox, error) {
 		return nil, s.abort(fmt.Errorf("applying network policy: %w", err))
 	}
 
-	runner, err := s.newRunner()
+	runner, err := s.newRunner("/", s.env)
 	if err != nil {
 		return nil, s.abort(fmt.Errorf("creating interpreter: %w", err))
 	}
@@ -209,18 +217,42 @@ func (s *Sandbox) abort(err error) error {
 	return err
 }
 
-// newRunner builds the interpreter that every Exec reuses. Its mounts,
-// environment and handlers are fixed for the sandbox's lifetime; only the
-// standard streams change, and Exec sets those per call.
-func (s *Sandbox) newRunner() (*interp.Runner, error) {
-	return interp.New(
-		interp.Dir("/"),
-		interp.Env(expand.ListEnviron(s.env...)),
-		interp.ExecHandlers(builtins.ExecMiddleware(s.fs, builtins.Options{HTTP: s.httpClient, Python: s.pyInterp, Commands: s.commands})),
+// newRunner builds an interpreter wired to the sandbox: its filesystem, its
+// network policy and its commands. The sandbox builds one at construction that
+// every Exec reuses, and one per child execution, which is what keeps a child's
+// shell state out of its parent's.
+//
+// dir is where the interpreter starts and env is what it starts with; extra
+// carries whatever else the caller needs to set, in practice the standard
+// streams.
+func (s *Sandbox) newRunner(dir string, env []string, extra ...interp.RunnerOption) (*interp.Runner, error) {
+	opts := []interp.RunnerOption{
+		interpDir(dir),
+		interp.Env(expand.ListEnviron(env...)),
+		interp.ExecHandlers(builtins.ExecMiddleware(s.fs, builtins.Options{
+			HTTP:     s.httpClient,
+			Python:   s.pyInterp,
+			Commands: s.commands,
+			Nested:   s.nestedExecutorFor,
+		})),
 		interp.OpenHandler(openHandler(s.fs)),
 		interp.ReadDirHandler2(readDirHandler(s.fs)),
 		interp.StatHandler(statHandler(s.fs)),
-	)
+	}
+	return interp.New(append(opts, extra...)...)
+}
+
+// interpDir sets the interpreter's working directory. [interp.Dir] cannot be
+// used for it: that one stats the path on the host, and a sandbox path such as
+// /work has no reason to exist there.
+func interpDir(dir string) interp.RunnerOption {
+	return func(r *interp.Runner) error {
+		if !strings.HasPrefix(dir, "/") {
+			return fmt.Errorf("working directory %q is not absolute", dir)
+		}
+		r.Dir = dir
+		return nil
+	}
 }
 
 // initFS creates the default directories in the virtual filesystem.
@@ -298,6 +330,10 @@ type Result struct {
 // A sandbox is a single shell session: the working directory, variables and
 // functions a script leaves behind are still in effect for the next Exec.
 // Calls are therefore serialized, and concurrent callers wait their turn.
+//
+// That serialization is admission control for top-level runs only. A command
+// running inside a script can start a child execution of its own through
+// [command.NestedExecutor] without queueing behind the run it is part of.
 func (s *Sandbox) Exec(ctx context.Context, script string, stdin io.Reader) (*Result, error) {
 	file, err := syntax.NewParser().Parse(strings.NewReader(script), "script")
 	if err != nil {
@@ -327,6 +363,10 @@ func (s *Sandbox) Exec(ctx context.Context, script string, stdin io.Reader) (*Re
 		ctx, cancel = context.WithTimeout(ctx, s.timeout)
 		defer cancel()
 	}
+
+	// The root of this run's execution tree. A command dispatched anywhere in the
+	// script finds it on the context, and hangs its own child executions off it.
+	ctx = withExecution(ctx, s.newExecution())
 
 	res := &Result{}
 	runErr := s.runner.Run(ctx, file)

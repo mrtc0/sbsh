@@ -102,6 +102,25 @@ type Environ interface {
 	All() []string
 }
 
+// ExportedEnviron is an [Environ] that can tell the exported variables from the
+// rest, the way a shell distinguishes "export FOO=1" from "FOO=1".
+//
+// [Environ] does not require it, because most of what reads the environment
+// wants everything a command can see. Nested execution is the exception: a child
+// starts from a fresh shell, so what it inherits has to be what a child shell
+// would inherit, which is the exported variables and nothing else.
+//
+// The environment the sandbox builds implements it. An Environ that does not is
+// taken to have no exported variables, so a child inherits none — a nested
+// execution that silently over-shares would be the worse failure.
+type ExportedEnviron interface {
+	Environ
+
+	// Exported returns the exported variables as "NAME=value" pairs, in the same
+	// form as [Environ.All] and with the same restriction to plain strings.
+	Exported() []string
+}
+
 // Abs resolves p against the working directory and normalizes it, giving the
 // absolute sandbox path to hand to FS.
 func (inv *Invocation) Abs(p string) string {
