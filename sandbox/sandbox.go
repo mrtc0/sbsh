@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/mrtc0/sh/v3/expand"
@@ -50,6 +51,10 @@ type Sandbox struct {
 	// mu serializes Exec, which shares runner across calls.
 	mu     sync.Mutex
 	runner *interp.Runner
+
+	// executions counts the executions the sandbox has run, a child of one
+	// included, which is what numbers them in the execution tree.
+	executions atomic.Uint64
 }
 
 type Option func(*Sandbox) error
@@ -192,7 +197,7 @@ func New(ctx context.Context, opts ...Option) (*Sandbox, error) {
 		return nil, s.abort(fmt.Errorf("applying network policy: %w", err))
 	}
 
-	runner, err := s.newRunner()
+	runner, err := s.newRunner("/", s.env)
 	if err != nil {
 		return nil, s.abort(fmt.Errorf("creating interpreter: %w", err))
 	}
@@ -209,18 +214,41 @@ func (s *Sandbox) abort(err error) error {
 	return err
 }
 
-// newRunner builds the interpreter that every Exec reuses. Its mounts,
-// environment and handlers are fixed for the sandbox's lifetime; only the
-// standard streams change, and Exec sets those per call.
-func (s *Sandbox) newRunner() (*interp.Runner, error) {
-	return interp.New(
+// newRunner builds an interpreter over the sandbox's capabilities, starting in
+// dir with env. Everything a runner is given beyond those two — the mounts, the
+// deny patterns, the network policy, the commands — is the sandbox's and is the
+// same for every runner, which is what keeps a nested run on the same boundary
+// as the top-level one.
+//
+// The sandbox builds one at construction that every Exec reuses, so that a
+// script's variables and working directory survive into the next call; nested
+// execution builds one per child, which is what gives a child a session of its
+// own. opts are applied last, so a caller can set the standard streams up front
+// rather than swapping them after the fact.
+func (s *Sandbox) newRunner(dir string, env []string, opts ...interp.RunnerOption) (*interp.Runner, error) {
+	runner, err := interp.New(append([]interp.RunnerOption{
+		// The directory is set below rather than through interp.Dir, which
+		// validates the path against the host filesystem: a sandbox path is not
+		// a host path, and "/work" existing in the sandbox says nothing about
+		// the machine. The caller has already checked it against the sandbox
+		// filesystem, which is the only one that counts here.
 		interp.Dir("/"),
-		interp.Env(expand.ListEnviron(s.env...)),
-		interp.ExecHandlers(builtins.ExecMiddleware(s.fs, builtins.Options{HTTP: s.httpClient, Python: s.pyInterp, Commands: s.commands})),
+		interp.Env(expand.ListEnviron(env...)),
+		interp.ExecHandlers(builtins.ExecMiddleware(s.fs, builtins.Options{
+			HTTP:     s.httpClient,
+			Python:   s.pyInterp,
+			Commands: s.commands,
+			Nested:   s.nested,
+		})),
 		interp.OpenHandler(openHandler(s.fs)),
 		interp.ReadDirHandler2(readDirHandler(s.fs)),
 		interp.StatHandler(statHandler(s.fs)),
-	)
+	}, opts...)...)
+	if err != nil {
+		return nil, err
+	}
+	runner.Dir = vfs.Normalize(dir)
+	return runner, nil
 }
 
 // initFS creates the default directories in the virtual filesystem.
@@ -301,7 +329,18 @@ type Result = exec.Result
 // A sandbox is a single shell session: the working directory, variables and
 // functions a script leaves behind are still in effect for the next Exec.
 // Calls are therefore serialized, and concurrent callers wait their turn.
+//
+// That session is why Exec is a top-level entry point only. A command running
+// in the sandbox that calls it would be waiting for the very execution it is
+// part of to finish, so such a call is refused with [exec.OutcomeDenied] rather
+// than deadlocking. Nested execution is what a command uses instead: see
+// [github.com/mrtc0/sbsh/sandbox/command.Invocation.RunNested].
 func (s *Sandbox) Exec(ctx context.Context, script string, stdin io.Reader) (*Result, error) {
+	if parent, ok := exec.FromContext(ctx); ok {
+		return exec.Denied(fmt.Sprintf(
+			"execution %s is already running: a command in the sandbox runs a script with nested execution, not Exec", parent.ID)), nil
+	}
+
 	file, err := syntax.NewParser().Parse(strings.NewReader(script), "script")
 	if err != nil {
 		return exec.Invalid(fmt.Errorf("sandbox: parse: %w", err))
@@ -330,6 +369,11 @@ func (s *Sandbox) Exec(ctx context.Context, script string, stdin io.Reader) (*Re
 		ctx, cancel = context.WithTimeout(ctx, s.timeout)
 		defer cancel()
 	}
+
+	// The run's place in the execution tree travels in its context: it is what a
+	// re-entrant Exec is recognized by above, and what a child started from
+	// inside this run hangs from.
+	ctx = exec.NewContext(ctx, exec.Root(s.executions.Add(1)))
 
 	runErr := s.runner.Run(ctx, file)
 	out := exec.Output{
