@@ -82,6 +82,11 @@ type Invocation struct {
 	// Env is the shell's variables. It is nil only when a caller builds an
 	// Invocation by hand and leaves it out; the sandbox always populates it.
 	Env Environ
+
+	// Nested runs a script as a child of this execution, inside the same
+	// sandbox. It is nil when the invocation did not come from a sandbox run, so
+	// a command that nests checks it first.
+	Nested NestedExecutor
 }
 
 // Environ is read access to the shell's variables. It is an interface rather
