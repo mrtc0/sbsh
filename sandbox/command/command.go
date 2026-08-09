@@ -141,6 +141,11 @@ type ExitError struct {
 	Msg  string
 }
 
+// ExitCode returns the status the command reported. It is what lets the
+// execution result contract classify an ExitError without importing this
+// package, which imports that one in turn.
+func (e *ExitError) ExitCode() int { return e.Code }
+
 // Error renders the message when there is one, so a Go caller inspecting the
 // error reads what the caller of the command would have been shown, and the
 // status otherwise.

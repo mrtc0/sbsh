@@ -14,6 +14,9 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mrtc0/sbsh/sandbox/command"
+	"github.com/mrtc0/sbsh/sandbox/exec"
 )
 
 // fsAssertion verifies the state of the sandbox filesystem after a script runs.
@@ -32,7 +35,6 @@ func TestSandbox_Exec(t *testing.T) {
 		wantStdout string
 		wantStderr string // asserted with Contains when non-empty
 		wantExit   int
-		wantErr    bool // a sandbox-level failure (parse / quarantine), distinct from a non-zero exit
 		assertFS   fsAssertion
 	}{
 		{
@@ -79,9 +81,13 @@ func TestSandbox_Exec(t *testing.T) {
 			wantExit: 1,
 		},
 		{
-			name:    "process substitution is rejected before running",
-			script:  "cat <(echo hi)",
-			wantErr: true,
+			// Refused syntax is an outcome of the request rather than a failure of
+			// the sandbox, so it arrives as a status and a diagnostic; see
+			// TestSandbox_ExecResultContract.
+			name:       "process substitution is rejected before running",
+			script:     "cat <(echo hi)",
+			wantExit:   126,
+			wantStderr: "process substitution is not allowed",
 		},
 		{
 			name:       "source finds a script through PATH in the virtual filesystem",
@@ -134,10 +140,6 @@ func TestSandbox_Exec(t *testing.T) {
 			t.Cleanup(func() { sb.Close() })
 
 			res, err := sb.Exec(context.Background(), tc.script, tc.stdin)
-			if tc.wantErr {
-				require.Error(t, err)
-				return
-			}
 			require.NoError(t, err)
 
 			assert.Equal(t, tc.wantExit, res.ExitCode, "exit code")
@@ -147,6 +149,120 @@ func TestSandbox_Exec(t *testing.T) {
 			}
 			if tc.assertFS != nil {
 				tc.assertFS(t, sb.FS())
+			}
+		})
+	}
+}
+
+// TestSandbox_ExecResultContract walks the execution result contract through the
+// top-level entry point: every ending, the outcome it reports, and whether a Go
+// error comes with it.
+//
+// The classification itself is the contract's, not Exec's — the mapping is pinned
+// in the exec package, where nested execution reaches it too. What this test adds
+// is that the top-level path really does route each of its endings into it.
+func TestSandbox_ExecResultContract(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		opts        []Option
+		script      string
+		wantOutcome exec.Outcome
+		wantExit    int
+		wantStderr  string
+		wantErr     bool
+	}{
+		{
+			name:        "a script that exits zero completed",
+			script:      "echo hello",
+			wantOutcome: exec.OutcomeCompleted,
+		},
+		{
+			name:        "a script that fails on its own completed with its status",
+			script:      "exit 3",
+			wantOutcome: exec.OutcomeCompleted,
+			wantExit:    3,
+		},
+		{
+			name:        "an unresolved command name is a command not found",
+			script:      "definitely-not-a-command",
+			wantOutcome: exec.OutcomeNotFound,
+			wantExit:    127,
+			wantStderr:  "definitely-not-a-command: command not found",
+		},
+		{
+			// The status the caller asked for wins: the script decided what to
+			// report after the name did not resolve.
+			name:        "a script that handles an unresolved command completed",
+			script:      "definitely-not-a-command 2>/dev/null || exit 4",
+			wantOutcome: exec.OutcomeCompleted,
+			wantExit:    4,
+		},
+		{
+			// The case that a 127 alone could not tell apart: the script handled the
+			// unresolved name and then chose the same status for itself.
+			name:        "a script that chooses 127 for itself completed",
+			script:      "definitely-not-a-command 2>/dev/null; exit 127",
+			wantOutcome: exec.OutcomeCompleted,
+			wantExit:    127,
+		},
+		{
+			name:        "an unresolved command inside a pipeline is a command not found",
+			script:      "echo hi | definitely-not-a-command",
+			wantOutcome: exec.OutcomeNotFound,
+			wantExit:    127,
+		},
+		{
+			name:        "syntax the sandbox refuses is denied",
+			script:      "cat <(echo hi)",
+			wantOutcome: exec.OutcomeDenied,
+			wantExit:    126,
+			wantStderr:  "process substitution is not allowed in the sandbox",
+		},
+		{
+			name:        "a script that does not parse is an invalid request",
+			script:      "if",
+			wantOutcome: exec.OutcomeInvalid,
+			wantExit:    2,
+			wantErr:     true,
+		},
+		{
+			// A registered command reports through the same contract as a builtin:
+			// the status it exits with is the run's own.
+			name: "the status a registered command reports is the run's",
+			opts: []Option{WithCommand(command.New("failing", "exits non-zero",
+				func(context.Context, *command.Invocation) error {
+					return command.Exit(7, "did not work")
+				}))},
+			script:      "failing",
+			wantOutcome: exec.OutcomeCompleted,
+			wantExit:    7,
+			wantStderr:  "failing: did not work",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			sb, err := New(context.Background(), tc.opts...)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = sb.Close() })
+
+			res, err := sb.Exec(context.Background(), tc.script, nil)
+
+			require.NotNil(t, res, "a result is always populated")
+			if tc.wantErr {
+				require.Error(t, err, "%s comes with the detail as an error", tc.wantOutcome)
+			} else {
+				require.NoError(t, err, "%s is represented in a field, not an error", tc.wantOutcome)
+			}
+			assert.Equal(t, tc.wantOutcome, res.Outcome, "outcome")
+			assert.Equal(t, tc.wantExit, res.ExitCode, "exit code")
+			assert.Equal(t, tc.wantOutcome == exec.OutcomeCompleted && tc.wantExit == 0, res.OK(), "OK")
+			if tc.wantStderr != "" {
+				assert.Contains(t, res.Stderr, tc.wantStderr, "stderr")
 			}
 		})
 	}
@@ -164,9 +280,10 @@ func TestSandbox_ExecReportsBeingStoppedThroughTheExitCode(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name     string
-		ctx      func(t *testing.T) context.Context
-		wantExit int
+		name        string
+		ctx         func(t *testing.T) context.Context
+		wantOutcome exec.Outcome
+		wantExit    int
 	}{
 		{
 			name: "a cancelled context reports SIGINT",
@@ -175,7 +292,8 @@ func TestSandbox_ExecReportsBeingStoppedThroughTheExitCode(t *testing.T) {
 				cancel()
 				return ctx
 			},
-			wantExit: 130,
+			wantOutcome: exec.OutcomeCanceled,
+			wantExit:    130,
 		},
 		{
 			name: "an expired deadline reports SIGKILL",
@@ -184,7 +302,8 @@ func TestSandbox_ExecReportsBeingStoppedThroughTheExitCode(t *testing.T) {
 				t.Cleanup(cancel)
 				return ctx
 			},
-			wantExit: 137,
+			wantOutcome: exec.OutcomeTimedOut,
+			wantExit:    137,
 		},
 	}
 
@@ -199,7 +318,9 @@ func TestSandbox_ExecReportsBeingStoppedThroughTheExitCode(t *testing.T) {
 			res, err := sb.Exec(tc.ctx(t), "echo hello", nil)
 			require.NoError(t, err, "being stopped is not a sandbox failure")
 			require.NotNil(t, res)
+			assert.Equal(t, tc.wantOutcome, res.Outcome)
 			assert.Equal(t, tc.wantExit, res.ExitCode)
+			assert.True(t, res.Stopped(), "a limit the caller asked for stopped the run")
 		})
 	}
 }

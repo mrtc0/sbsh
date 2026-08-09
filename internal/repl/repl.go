@@ -116,11 +116,15 @@ func (r *Runner) exec(ctx context.Context, sb Executor, script string, stdin io.
 	defer stop()
 
 	res, err := sb.Exec(ctx, script, stdin)
+	if res != nil {
+		// Whatever the script managed to write belongs to the user even when the
+		// sandbox went on to fail, so the result is printed before the error.
+		printResult(res, out, errw)
+	}
 	if err != nil {
 		fmt.Fprintln(errw, "sandbox error:", err)
 		return 1
 	}
-	printResult(res, out, errw)
 	return res.ExitCode
 }
 
