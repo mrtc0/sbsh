@@ -126,7 +126,15 @@ func ExecMiddleware(fsys vfs.FS, opts Options) func(next interp.ExecHandlerFunc)
 					if ee.Msg != "" {
 						fmt.Fprintf(hc.Stderr, "%s: %s\n", args[0], ee.Msg)
 					}
-					return interp.ExitStatus(uint8(ee.Code))
+					// A zero status is success, and the shell backend has no
+					// error to represent it with: interp.ExitStatus(0) is a
+					// non-nil error carrying a zero code, which breaks the
+					// backend's own invariant. Report success as the absence of
+					// an error instead.
+					if code := uint8(ee.Code); code != 0 {
+						return interp.ExitStatus(code)
+					}
+					return nil
 				}
 				// Defensive: a builtin may surface the backend's native exit
 				// status directly. It is already a uint8, so pass it through.
