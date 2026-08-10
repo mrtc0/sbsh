@@ -2,9 +2,9 @@ package exec
 
 import (
 	"context"
-	"crypto/rand"
-	"fmt"
 	"strconv"
+
+	"github.com/google/uuid"
 )
 
 // Execution identifies one run in the sandbox's execution tree. A host calling
@@ -42,20 +42,11 @@ func (e Execution) Child(seq uint64) Execution {
 }
 
 // Root returns the execution for a run a host started, rather than one started
-// from inside the sandbox. Each call mints an ID of its own.
+// from inside the sandbox. Each call mints an ID of its own: a version 4 UUID,
+// drawn from crypto/rand, which does not fail — so a root is not created with an
+// error to handle, an ID being nothing a caller could do anything about.
 func Root() Execution {
-	return Execution{ID: newRootID()}
-}
-
-// newRootID returns a version 4 UUID. The randomness comes from crypto/rand,
-// which does not fail, so a root never has to be created with an error to
-// handle: an ID is not something a caller can do anything about.
-func newRootID() string {
-	var b [16]byte
-	rand.Read(b[:])
-	b[6] = b[6]&0x0f | 0x40 // version 4
-	b[8] = b[8]&0x3f | 0x80 // variant 1
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+	return Execution{ID: uuid.NewString()}
 }
 
 // executionKey is the context key the current execution is carried under.
