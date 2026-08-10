@@ -52,8 +52,9 @@ type Sandbox struct {
 	mu     sync.Mutex
 	runner *interp.Runner
 
-	// executions counts the executions the sandbox has run, a child of one
-	// included, which is what numbers them in the execution tree.
+	// executions counts the child executions the sandbox has run, which is what
+	// numbers them within the execution tree. A root is named by a UUID of its
+	// own and does not draw from this.
 	executions atomic.Uint64
 }
 
@@ -332,12 +333,13 @@ type Result = exec.Result
 //
 // That session is why Exec is a top-level entry point only. A command running
 // in the sandbox that calls it would be waiting for the very execution it is
-// part of to finish, so such a call is refused with [exec.OutcomeDenied] rather
-// than deadlocking. Nested execution is what a command uses instead: see
+// part of to finish, so such a call is answered with [exec.OutcomeUnsupported]
+// rather than deadlocking — the sandbox has no way to run it, which is not the
+// same as refusing to. Nested execution is what a command uses instead: see
 // [github.com/mrtc0/sbsh/sandbox/command.Invocation.RunNested].
 func (s *Sandbox) Exec(ctx context.Context, script string, stdin io.Reader) (*Result, error) {
 	if parent, ok := exec.FromContext(ctx); ok {
-		return exec.Denied(fmt.Sprintf(
+		return exec.Unsupported(fmt.Sprintf(
 			"execution %s is already running: a command in the sandbox runs a script with nested execution, not Exec", parent.ID)), nil
 	}
 
@@ -373,7 +375,7 @@ func (s *Sandbox) Exec(ctx context.Context, script string, stdin io.Reader) (*Re
 	// The run's place in the execution tree travels in its context: it is what a
 	// re-entrant Exec is recognized by above, and what a child started from
 	// inside this run hangs from.
-	ctx = exec.NewContext(ctx, exec.Root(s.executions.Add(1)))
+	ctx = exec.NewContext(ctx, exec.Root())
 
 	runErr := s.runner.Run(ctx, file)
 	out := exec.Output{

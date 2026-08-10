@@ -191,6 +191,14 @@ func TestResultConstructorsPairTheErrorWithTheOutcome(t *testing.T) {
 	assert.Equal(t, "sbsh: process substitution is not allowed in the sandbox\n", denied.Stderr,
 		"a denial carries no error, so its reason has to be readable on stderr")
 
+	unsupported := exec.Unsupported("nested execution is not available in this sandbox")
+	assert.Equal(t, exec.OutcomeUnsupported, unsupported.Outcome)
+	assert.Equal(t, 126, unsupported.ExitCode,
+		"a shell has no status of its own for it, so it shares the denial's")
+	assert.NotEqual(t, exec.OutcomeDenied, unsupported.Outcome,
+		"a limitation of the runtime is not a policy denial")
+	assert.Equal(t, "sbsh: nested execution is not available in this sandbox\n", unsupported.Stderr)
+
 	boom := errors.New("boom")
 
 	invalid, err := exec.Invalid(boom)
@@ -226,5 +234,6 @@ func TestOutcomeString(t *testing.T) {
 	assert.Equal(t, "canceled", exec.OutcomeCanceled.String())
 	assert.Equal(t, "invalid request", exec.OutcomeInvalid.String())
 	assert.Equal(t, "internal error", exec.OutcomeInternal.String())
+	assert.Equal(t, "unsupported", exec.OutcomeUnsupported.String())
 	assert.Equal(t, "outcome(42)", exec.Outcome(42).String())
 }

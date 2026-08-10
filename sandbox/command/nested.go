@@ -105,14 +105,15 @@ type NestedRequest struct {
 // the host.
 //
 // A sandbox that offers no nested execution answers every request with
-// [exec.OutcomeDenied] rather than a nil-pointer panic, so a command may call
-// this without asking first whether it can.
+// [exec.OutcomeUnsupported] rather than a nil-pointer panic, so a command may
+// call this without asking first whether it can — and reads an outcome saying
+// the runtime cannot, not that a policy said no.
 func (inv *Invocation) RunNested(ctx context.Context, req NestedRequest) (*exec.Result, error) {
 	if strings.TrimSpace(req.Script) == "" {
 		return exec.Invalid(fmt.Errorf("%s: nested request has no script", inv.Name))
 	}
 	if inv.Nested == nil {
-		return exec.Denied("nested execution is not available"), nil
+		return exec.Unsupported("nested execution is not available in this sandbox"), nil
 	}
 	return inv.Nested.Run(ctx, req)
 }

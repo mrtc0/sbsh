@@ -506,12 +506,24 @@ func TestNestedRunNumbersTheExecutionTree(t *testing.T) {
 	_, err = s.Exec(t.Context(), "report", nil)
 	require.NoError(t, err)
 
-	// A child's ID carries its ancestry, and every execution is numbered in the
-	// order it started, children included.
-	assert.Equal(t, []string{"1@0", "1.2@1", "1@0", "1.3@1", "4@0"}, ids)
+	require.Len(t, ids, 5)
+	first, second := strings.Split(ids[0], "@")[0], strings.Split(ids[4], "@")[0]
+	assert.Regexp(t, `^[0-9a-f-]{36}$`, first, "a root is named by a UUID of its own")
+	assert.NotEqual(t, first, second, "each Exec is a root of its own")
+
+	// A child's ID is its parent's with the child's number appended, so the
+	// ancestry is readable from the ID alone; children are numbered in the order
+	// they start.
+	assert.Equal(t, []string{
+		first + "@0",
+		first + ".1@1",
+		first + "@0",
+		first + ".2@1",
+		second + "@0",
+	}, ids)
 }
 
-func TestExecRefusesToBeCalledFromInsideAnExecution(t *testing.T) {
+func TestExecReportsThatItCannotBeCalledFromInsideAnExecution(t *testing.T) {
 	t.Parallel()
 
 	var s *Sandbox
@@ -519,7 +531,7 @@ func TestExecRefusesToBeCalledFromInsideAnExecution(t *testing.T) {
 	var execErr error
 	reenter := command.New("reenter", "call Exec from inside the sandbox",
 		func(ctx context.Context, _ *command.Invocation) error {
-			// Nothing waits: the call is refused before it reaches the session
+			// Nothing waits: the call is answered before it reaches the session
 			// the caller is holding.
 			res, execErr = s.Exec(ctx, "echo hi", nil)
 			return command.Exit(0)
@@ -533,6 +545,11 @@ func TestExecRefusesToBeCalledFromInsideAnExecution(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	require.NoError(t, execErr)
-	assert.Equal(t, exec.OutcomeDenied, res.Outcome)
+	// A single shell session is a limitation of this runtime, not a policy it
+	// enforces: the sandbox has no way to run the call, and says what to use
+	// instead rather than implying permission was withheld.
+	assert.Equal(t, exec.OutcomeUnsupported, res.Outcome)
+	assert.NotEqual(t, exec.OutcomeDenied, res.Outcome)
+	assert.Equal(t, 126, res.ExitCode)
 	assert.Contains(t, res.Stderr, "nested execution")
 }

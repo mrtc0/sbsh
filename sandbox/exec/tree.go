@@ -2,6 +2,8 @@ package exec
 
 import (
 	"context"
+	"crypto/rand"
+	"fmt"
 	"strconv"
 )
 
@@ -14,12 +16,16 @@ import (
 // context to tell a first call from a re-entrant one, and the nested runtime
 // reads it to know how deep it already is.
 type Execution struct {
-	// ID names the execution within the sandbox. Executions are numbered in the
-	// order they start, and a child's ID is its parent's with the child's number
-	// appended: "3" is the third execution the sandbox ran, and "3.5" is the
-	// fifth, started from inside the third. Reading an ID therefore gives the
-	// whole ancestry, which is what makes it worth carrying instead of a bare
-	// depth.
+	// ID names the execution. A root's ID is a UUID, so an execution can be
+	// named outside the sandbox that ran it — in a log, a trace, a bug report —
+	// without a second sandbox in another process having numbered something the
+	// same. A child's ID is its parent's with the child's number appended, so
+	// "550e8400-e29b-41d4-a716-446655440000.1" is a child of that root and
+	// "550e8400-e29b-41d4-a716-446655440000.1.2" is a child of that child.
+	//
+	// Reading an ID therefore gives the whole ancestry, which is what makes it
+	// worth carrying instead of a bare depth: the dotted tail is the path from
+	// the root, and the part before the first dot is the run a host asked for.
 	ID string
 
 	// Depth is how far the execution is from a root: 0 for a run a host started,
@@ -35,10 +41,21 @@ func (e Execution) Child(seq uint64) Execution {
 	return Execution{ID: e.ID + "." + strconv.FormatUint(seq, 10), Depth: e.Depth + 1}
 }
 
-// Root returns the execution for the seq-th execution of the sandbox, started by
-// a host rather than from inside the sandbox.
-func Root(seq uint64) Execution {
-	return Execution{ID: strconv.FormatUint(seq, 10)}
+// Root returns the execution for a run a host started, rather than one started
+// from inside the sandbox. Each call mints an ID of its own.
+func Root() Execution {
+	return Execution{ID: newRootID()}
+}
+
+// newRootID returns a version 4 UUID. The randomness comes from crypto/rand,
+// which does not fail, so a root never has to be created with an error to
+// handle: an ID is not something a caller can do anything about.
+func newRootID() string {
+	var b [16]byte
+	rand.Read(b[:])
+	b[6] = b[6]&0x0f | 0x40 // version 4
+	b[8] = b[8]&0x3f | 0x80 // variant 1
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
 // executionKey is the context key the current execution is carried under.
