@@ -27,6 +27,10 @@ const (
 	// Denied is a request the sandbox refused to run, following the shell's
 	// "cannot execute".
 	Denied = 126
+	// Unsupported is a request the sandbox has no way to carry out. A shell has
+	// no status of its own for that, and "cannot execute" is what it amounts to,
+	// so it shares Denied's status; the outcome is where the two are told apart.
+	Unsupported = 126
 	// NotFound is a command name that did not resolve, following the shell's
 	// "command not found".
 	NotFound = 127

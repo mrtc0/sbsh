@@ -90,15 +90,17 @@ func TestRunNestedRejectsARequestWithNoScript(t *testing.T) {
 	}
 }
 
-func TestRunNestedDeniesWhenTheSandboxOffersNoNestedExecution(t *testing.T) {
+func TestRunNestedReportsASandboxThatOffersNoNestedExecution(t *testing.T) {
 	t.Parallel()
 
 	inv := &command.Invocation{Name: "orchestrate"}
 
 	res, err := inv.RunNested(context.Background(), command.NestedRequest{Script: "echo hi"})
 
+	// There is nothing here to refuse the request: the runtime has no nested
+	// execution at all, which is what the outcome says.
 	require.NoError(t, err)
-	assert.Equal(t, exec.OutcomeDenied, res.Outcome)
+	assert.Equal(t, exec.OutcomeUnsupported, res.Outcome)
 	assert.Equal(t, 126, res.ExitCode)
 	assert.Contains(t, res.Stderr, "nested execution is not available")
 }

@@ -29,8 +29,9 @@
 //     deadline of its own.
 //   - Report the outcomes for what a nested request is: [OutcomeInvalid] for a
 //     call with no command in it, the way it is a script that does not parse at
-//     the top level, and [OutcomeDenied] for a call the executor refuses, the way
-//     it is refused shell syntax at the top level.
+//     the top level, [OutcomeDenied] for a call the executor refuses, the way it
+//     is refused shell syntax at the top level, and [OutcomeUnsupported] where
+//     there is no nested execution to refuse it in the first place.
 //   - Fill [Result.Truncated] from what it captured itself. Output limits apply
 //     to the run that captured the output.
 package exec
@@ -80,6 +81,11 @@ const (
 	// patterns cover, a destination the network policy does not allow — are not this
 	// outcome. Those are the command's own failure, and it reports them the way
 	// it reports any other: a status and a diagnostic of its own.
+	//
+	// A request the sandbox has no way to carry out is not this outcome either.
+	// That is [OutcomeUnsupported]: "will not" and "cannot" are different
+	// answers, and a caller that reports a denial to a user should not be
+	// telling them a policy stopped them when the runtime simply cannot do it.
 	OutcomeDenied
 
 	// OutcomeTimedOut means the run was stopped because its deadline passed.
@@ -104,6 +110,21 @@ const (
 	// A Go error accompanies the result. This is the only outcome that reports a
 	// fault rather than something the caller asked for or wrote.
 	OutcomeInternal
+
+	// OutcomeUnsupported means the request is one this runtime has no way to
+	// carry out, whatever its policy says. Calling
+	// [github.com/mrtc0/sbsh/sandbox.Sandbox.Exec] from inside the sandbox is the
+	// case it exists for: a command doing that would be waiting on the very
+	// execution it is part of, so the sandbox answers instead of deadlocking, and
+	// nothing about permission is being decided. ExitCode is 126, the same
+	// "cannot execute" a denial reports, since a shell has no separate status
+	// for it.
+	//
+	// Like a denial it is an outcome of a run rather than a fault, so no Go error
+	// accompanies it and the reason — including what to do instead — is on
+	// Stderr. It is the last outcome so that adding it leaves the others' values
+	// alone.
+	OutcomeUnsupported
 )
 
 func (o Outcome) String() string {
@@ -122,6 +143,8 @@ func (o Outcome) String() string {
 		return "invalid request"
 	case OutcomeInternal:
 		return "internal error"
+	case OutcomeUnsupported:
+		return "unsupported"
 	default:
 		return fmt.Sprintf("outcome(%d)", int(o))
 	}
@@ -182,6 +205,18 @@ func Denied(reason string) *Result {
 		Stderr:   fmt.Sprintf("sbsh: %s\n", reason),
 		ExitCode: exitcode.Denied,
 		Outcome:  OutcomeDenied,
+	}
+}
+
+// Unsupported returns the result for a request this runtime has no way to carry
+// out. reason is what a person is shown, on Stderr, since no Go error carries
+// it; it should say what to do instead, because a caller cannot get this
+// answered by asking differently.
+func Unsupported(reason string) *Result {
+	return &Result{
+		Stderr:   fmt.Sprintf("sbsh: %s\n", reason),
+		ExitCode: exitcode.Unsupported,
+		Outcome:  OutcomeUnsupported,
 	}
 }
 

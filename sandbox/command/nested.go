@@ -57,9 +57,15 @@ type NestedRequest struct {
 	// what a command that just wants "run this here" leaves it as.
 	Dir string
 
-	// Env are "NAME=value" pairs layered on top of the environment the caller
-	// sees, so a request sets what it cares about rather than restating the
-	// whole environment. A name already set is overridden for the child alone.
+	// Env are the "NAME=value" pairs the child's script reads. A child does not
+	// inherit the caller's environment: a variable the script needs is named
+	// here or it is unset. That is what keeps a nested run dependent on the
+	// request rather than on whatever the calling shell happens to hold.
+	//
+	// Two variables come without asking. HOME is the caller's, because a script
+	// has no other way to find it, and PWD is derived from Dir. Both are the
+	// sandbox's to set: an entry naming PWD or OLDPWD is dropped, so PWD cannot
+	// disagree with where the child runs and OLDPWD starts unset.
 	Env []string
 
 	// Timeout bounds the child on top of whatever time the caller's own
@@ -99,14 +105,15 @@ type NestedRequest struct {
 // the host.
 //
 // A sandbox that offers no nested execution answers every request with
-// [exec.OutcomeDenied] rather than a nil-pointer panic, so a command may call
-// this without asking first whether it can.
+// [exec.OutcomeUnsupported] rather than a nil-pointer panic, so a command may
+// call this without asking first whether it can — and reads an outcome saying
+// the runtime cannot, not that a policy said no.
 func (inv *Invocation) RunNested(ctx context.Context, req NestedRequest) (*exec.Result, error) {
 	if strings.TrimSpace(req.Script) == "" {
 		return exec.Invalid(fmt.Errorf("%s: nested request has no script", inv.Name))
 	}
 	if inv.Nested == nil {
-		return exec.Denied("nested execution is not available"), nil
+		return exec.Unsupported("nested execution is not available in this sandbox"), nil
 	}
 	return inv.Nested.Run(ctx, req)
 }

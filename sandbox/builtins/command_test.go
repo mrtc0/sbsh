@@ -405,7 +405,8 @@ func TestExecMiddlewareLeavesNestedExecutionUnavailableByDefault(t *testing.T) {
 	t.Parallel()
 
 	// Without the hook a command still gets an answer rather than a panic: the
-	// sandbox offers no nested execution, which the contract calls a denial.
+	// sandbox offers no nested execution, which the contract reports as a
+	// limitation of the runtime rather than a denial.
 	var got *exec.Result
 	opts := Options{
 		Commands: map[string]command.Command{
@@ -425,7 +426,7 @@ func TestExecMiddlewareLeavesNestedExecutionUnavailableByDefault(t *testing.T) {
 
 	assert.Equal(t, uint8(0), res.exit)
 	require.NotNil(t, got)
-	assert.Equal(t, exec.OutcomeDenied, got.Outcome)
+	assert.Equal(t, exec.OutcomeUnsupported, got.Outcome)
 }
 
 func TestShellEnviron(t *testing.T) {

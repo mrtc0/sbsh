@@ -130,6 +130,7 @@ reads.
 | `OutcomeCanceled` | 130 | The caller's context was cancelled | nil |
 | `OutcomeInvalid` | 2 | The request could never become a run — a script that does not parse | non-nil |
 | `OutcomeInternal` | 125 | The sandbox itself failed; the status says nothing | non-nil |
+| `OutcomeUnsupported` | 126 | The runtime has no way to carry the request out; stderr says what to use instead | nil |
 
 An `error` therefore means one of two things only: the request could not be made
 sense of, or the sandbox is at fault. Everything else — a failing script, an
@@ -145,6 +146,12 @@ A denial a command runs into while it works — a path `WithDenyPaths` covers, a
 destination the network policy does not allow — is not `OutcomeDenied`. That is
 the command's own failure, reported the way it reports any other: a status and a
 diagnostic. `OutcomeDenied` is for a request the sandbox would not start.
+
+`OutcomeUnsupported` is the neighbouring case: a request this runtime *cannot*
+carry out rather than one it refuses. Calling `Exec` from inside the sandbox is
+the example — a single shell session cannot re-enter itself, and no permission is
+being decided — so a caller reporting a refusal to a user does not tell them a
+policy stopped them when nothing did.
 
 The contract is the shape nested execution will report back with too, which is
 why classification lives in `sandbox/exec` rather than in `Exec`. The package
