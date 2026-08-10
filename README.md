@@ -153,10 +153,9 @@ the example — a single shell session cannot re-enter itself, and no permission
 being decided — so a caller reporting a refusal to a user does not tell them a
 policy stopped them when nothing did.
 
-The contract is the shape nested execution will report back with too, which is
-why classification lives in `sandbox/exec` rather than in `Exec`. The package
-documentation states what a nested entry point has to do to stay consistent with
-the top level.
+A command running inside the sandbox reports back with the same contract, which
+is why classification lives in `sandbox/exec` rather than in `Exec` — see
+[Nested execution](#nested-execution).
 
 ### Options
 
@@ -225,6 +224,7 @@ mentions the shell:
 | `FS` | The sandbox filesystem, mounts resolved and deny patterns in force |
 | `HTTP` | The policy-checked client, `nil` when no network was allowed |
 | `Python` | The sandbox's Python interpreter, the one the `python` command runs on |
+| `Nested` | The runtime behind `inv.RunNested`, which runs a script back inside the sandbox — see [Nested execution](#nested-execution) |
 
 Nothing in it is valid after the call returns: the streams belong to the shell,
 which may be piping them into the next command.
@@ -269,6 +269,95 @@ that wants to render its own listing; sbsh has no `help` command of its own.
 `wordfreq` command reading files and standard input, registered and then used in
 a script alongside the builtins. Dynamic loading and config-file registration are
 not supported — a command added this way is Go code compiled into the host.
+
+### Nested execution
+
+A command does not have to reimplement in Go what the sandbox can already do. It
+runs a script back inside the sandbox it is running in, the way `bash` runs
+`bash`:
+
+```go
+res, err := inv.RunNested(ctx, command.NestedRequest{
+	Script: `set -o pipefail; cut -d, -f"$FIELD" -- "$FILE" | sort | uniq -c | sort -rn`,
+	Env:    []string{"FIELD=2", "FILE=" + inv.Args[0]},
+})
+if err != nil {
+	return command.Exitf(1, "%v", err) // a bad request, or the sandbox itself
+}
+if !res.OK() {
+	return command.Exitf(1, "counting failed: %s", res.Outcome)
+}
+```
+
+The child runs on the same capability boundary as the caller: the same mounts and
+deny patterns, the same network policy, the same registered commands. There is no
+route to the host in it, and a `NestedRequest` can only narrow what the child is
+given, never widen it.
+
+It is *not* `Sandbox.Exec`. A sandbox is one shell session, and the command is
+running inside the execution that holds it, so calling `Exec` from inside would
+wait on the very run it is part of. That call is answered with
+`OutcomeUnsupported` instead of deadlocking. A nested run gets a shell session of
+its own, started where the caller stands and discarded when it ends.
+
+| What | Inherited by the child |
+|---|---|
+| Filesystem, deny patterns, network policy, commands, Python | Yes — the sandbox's, shared |
+| Working directory | The caller's `inv.Dir`, unless `Dir` names another; a relative `Dir` resolves against the caller's |
+| `HOME` | Yes — a script has no other way to find it |
+| `PWD` | Set by the sandbox from where the child actually runs |
+| The rest of the caller's environment | No — name what the script reads in `Env` |
+| Shell variables, functions, `set` options | No — a fresh session |
+| `OLDPWD` | No — the child has not been anywhere, so `cd -` cannot land in the caller's history |
+| Standard input | No — a request is a script, not a filter; the child reads an empty stdin |
+| Shell state the child leaves behind | No — its `cd`, its variables and its functions end with it. Files it writes are of course shared |
+
+`Env` entries are `NAME=value` pairs, and they are the whole environment the
+child's script reads. A child does not inherit the caller's environment because a
+command's environment is a record of everything that has happened to the shell —
+a variable some earlier command exported, a value the host passed in for another
+command's sake — and a script that reads it behaves differently depending on who
+called it. Naming what the script needs makes the request say what it depends on.
+An entry naming `PWD` or `OLDPWD` is dropped; those are the sandbox's to set.
+
+Prefer a variable to string concatenation, as above: a value interpolated into
+the script is shell source, so a file named `; rm -rf /` would be a second
+command. A variable is data whatever it holds.
+
+`Timeout` and `OutputLimit` only ever tighten. The caller's deadline stays in
+force and the earlier of the two stops the run; a limit above the sandbox's own
+is the sandbox's. Output past the limit is discarded and `res.Truncated` says so,
+independently of the outcome — a truncated run still completed.
+
+The result is the same `exec.Result` a host gets from `Exec`, so a caller cannot
+tell a child's ending from a top-level one by its shape. Read `res.Outcome`
+rather than parsing `res.Stderr`: `OutcomeCompleted` with a non-zero status is
+the script's own failure, `OutcomeDenied` a request the sandbox refused,
+`OutcomeTimedOut` or `OutcomeCanceled` a limit, `OutcomeUnsupported` a sandbox
+with no nested execution at all. The `error` is non-nil only for a request that
+makes no sense — an empty script, a working directory that is not there — and for
+a failure of the sandbox itself; a child that exits non-zero is not an error, any
+more than it is for the host.
+
+Nesting is bounded at 8 levels; past that a request reports `OutcomeDenied`
+rather than running. Composing a handful of commands is what this is for, and a
+command that invokes itself is a script away.
+
+What v1 leaves out, deliberately:
+
+- **Streaming.** The child's output is captured and returned when it ends;
+  nothing is written to `inv.Stdout` as it goes.
+- **Piping into a child.** There is no stdin to give it, and no way to run a
+  child as a stage of the caller's pipeline. Pass data through a file or through
+  `Env`.
+- **Loosening anything.** No request can add a mount, a network destination, more
+  time, or more output than the caller already has.
+- **Re-entering `Sandbox.Exec`.** It is the host's entry point; from inside it
+  reports `OutcomeUnsupported` and names the execution already running.
+
+[examples/nestedcommand](examples/nestedcommand/main.go) is a complete program: a
+`tally` command that counts a CSV column by composing `cut`, `sort` and `uniq`
+inside the sandbox instead of in Go.
 
 ## Policies
 
@@ -375,7 +464,11 @@ Per `Exec` call:
   output is discarded and `Result.Truncated` is set; the REPL says so on stderr.
   Truncation is never reported as success.
 - **Serialization** — `Exec` holds a lock, so concurrent callers queue. A sandbox
-  is one shell session, not a pool.
+  is one shell session, not a pool. A command running inside the sandbox does not
+  queue behind it and does not re-enter it: see
+  [Nested execution](#nested-execution).
+- **Nesting depth** — executions may nest 8 levels deep. A request past that
+  reports `OutcomeDenied` rather than running.
 - **No bytecode cache** — every `python` invocation compiles the modules it imports
   from source. The standard library is mounted read-only and no `.pyc` is shipped,
   because a committed one could never be accepted: its recorded source timestamp
