@@ -48,7 +48,7 @@ type nestedExecutor struct {
 	dir string
 
 	// implicitEnv is the whole of what a child is given without asking for it.
-	// See [childEnv] for why it is this short.
+	// See [buildChildEnv] for why it is this short.
 	implicitEnv []string
 }
 
@@ -68,17 +68,17 @@ func (s *Sandbox) nested(ctx context.Context, inv *command.Invocation) command.N
 
 	// HOME is where the user's things are, which is as true for a child as for
 	// the caller, and a script has no other way to ask. Everything else the
-	// caller happens to have is left behind; see [childEnv].
+	// caller happens to have is left behind; see [buildChildEnv].
 	var implicitEnv []string
-	if home, ok := lookupEnv(s.env, inv.Env, "HOME"); ok {
+	if home, ok := lookupCallerEnv(s.env, inv.Env, "HOME"); ok {
 		implicitEnv = append(implicitEnv, "HOME="+home)
 	}
 	return &nestedExecutor{sandbox: s, parent: parent, dir: dir, implicitEnv: implicitEnv}
 }
 
-// lookupEnv reads one variable as the calling command sees it, falling back to
-// the sandbox's own environment for an invocation built without one.
-func lookupEnv(sandboxEnv []string, inv command.Environ, name string) (string, bool) {
+// lookupCallerEnv reads one variable as the calling command sees it, falling
+// back to the sandbox's own environment for an invocation built without one.
+func lookupCallerEnv(sandboxEnv []string, inv command.Environ, name string) (string, bool) {
 	if inv != nil {
 		return inv.Lookup(name)
 	}
@@ -113,7 +113,7 @@ func (e *nestedExecutor) Run(ctx context.Context, req command.NestedRequest) (*e
 	if res != nil || err != nil {
 		return res, err
 	}
-	env, err := childEnv(e.implicitEnv, req.Env, dir)
+	env, err := buildChildEnv(e.implicitEnv, req.Env, dir)
 	if err != nil {
 		return exec.Invalid(fmt.Errorf("sandbox: nested environment: %w", err))
 	}
@@ -188,9 +188,9 @@ func (e *nestedExecutor) childDir(reqDir string) (string, *exec.Result, error) {
 	return dir, nil, nil
 }
 
-// childEnv builds the environment a child runs with: implicitEnv, the little a
-// child gets without asking, then what the request asks for, then PWD naming
-// dir, where the child actually starts.
+// buildChildEnv assembles the environment a child runs with: implicitEnv, the
+// little a child gets without asking, then what the request asks for, then PWD
+// naming dir, where the child actually starts.
 //
 // implicitEnv is short on purpose. A child does not inherit the caller's
 // environment, because a command's environment is a record of everything that
@@ -203,7 +203,7 @@ func (e *nestedExecutor) childDir(reqDir string) (string, *exec.Result, error) {
 // PWD is derived from dir, so it cannot disagree with where the child is, and
 // OLDPWD is left unset because the child has not been anywhere yet — a "cd -"
 // with the caller's OLDPWD would jump somewhere the child has never been.
-func childEnv(implicitEnv, overrides []string, dir string) ([]string, error) {
+func buildChildEnv(implicitEnv, overrides []string, dir string) ([]string, error) {
 	env := make([]string, 0, len(implicitEnv)+len(overrides)+1)
 	env = append(env, implicitEnv...)
 	for _, kv := range overrides {
