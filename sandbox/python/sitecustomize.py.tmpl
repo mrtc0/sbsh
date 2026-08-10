@@ -1,0 +1,63 @@
+"""Startup hook for sbsh's sandboxed Python runtime.
+
+CPython imports this at the end of site initialization, so it is the last thing
+to run before user code. It does two things:
+
+  * restores argv[0] and the working directory, neither of which WASI carries
+  * offers the sandbox's library roots to site, so that a host-provided package
+    tree is importable
+
+This file is a Go text/template. sbsh renders it into the standard library of
+each sandbox it builds, which is what scopes LIBRARY_ROOTS to one sandbox:
+nothing here is read from the environment, so a script cannot reach it.
+
+Every name below is private to this module. Nothing imports it.
+"""
+
+import os
+import site
+import sys
+
+# Set by sbsh around each invocation of the interpreter.
+ARGV0_ENV = '{{ .Argv0Env }}'
+CWD_ENV = '{{ .CwdEnv }}'
+
+# Absolute sandbox paths that may hold host-provided pure-Python packages,
+# in the order they should be searched.
+LIBRARY_ROOTS = ({{ range .LibraryRoots }}{{ pyquote . }}, {{ end }})
+
+
+def apply_argv0():
+    """Report the name the command was invoked as, rather than 'python'."""
+    argv0 = os.environ.get(ARGV0_ENV)
+    if argv0 is not None:
+        sys.argv[0] = argv0
+
+
+def apply_working_directory():
+    """Enter the shell's working directory. WASI has no concept of one."""
+    cwd = os.environ.get(CWD_ENV)
+    if cwd:
+        os.chdir(cwd)
+
+
+def add_library_roots():
+    """Make each mounted library root importable, as a normal site directory.
+
+    site.addsitedir is what a real site-packages goes through: it appends the
+    directory and processes the .pth files in it. Appending by hand instead
+    would leave a mounted tree importable but with its own metadata only
+    half-honoured.
+
+    The isdir check is what makes a root optional, and is the reason this is a
+    startup hook at all: addsitedir would happily append a directory that is
+    not there, leaving a dead entry behind for every failed import to walk.
+    """
+    for root in LIBRARY_ROOTS:
+        if os.path.isdir(root):
+            site.addsitedir(root)
+
+
+apply_argv0()
+apply_working_directory()
+add_library_roots()

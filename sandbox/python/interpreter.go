@@ -3,12 +3,15 @@ package python
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"path"
 	"strings"
+	"text/template"
+	"unicode"
 
 	"github.com/spf13/afero"
 	"github.com/tetratelabs/wazero"
@@ -28,18 +31,71 @@ const (
 // siteDir is the directory for site-packages, which is created empty in the stdlib FS.
 const siteDir = "/site-packages"
 
-// siteCustomizePy is the content of the sitecustomize.py file that is
-// automatically imported by CPython during site initialization.
-// It sets sys.argv[0] and the current working directory based on environment variables.
-var sitecustomizePy = fmt.Sprintf(`import sys, os
-_argv0 = os.environ.get('%s')
-if _argv0 is not None:
-    sys.argv[0] = _argv0
-_cwd = os.environ.get('%s')
-if _cwd:
-    os.chdir(_cwd)
-del _argv0, _cwd
-`, PythonArgv0Env, PythonCwdEnv)
+// LibraryRoot is where the runtime looks for host-provided pure-Python
+// packages. A host that mounts a prepared package tree here has nothing further
+// to configure; a sandbox with nothing mounted here is unaffected.
+//
+// It is a convention rather than an option, and the same one for the CLI and the
+// Go API: "--mount ./vendor/python:/lib/python/site-packages:ro" is the whole of
+// the common workflow. The name follows the layout Python itself expects, which
+// is what lets the root be treated as an ordinary site directory.
+const LibraryRoot = "/lib/python/site-packages"
+
+//go:embed sitecustomize.py.tmpl
+var sitecustomizeTmpl string
+
+// sitecustomizeTemplate renders the interpreter's startup hook. The hook is a
+// Python file of its own rather than a string built here, so that what runs at
+// startup can be read, and reviewed, as Python.
+var sitecustomizeTemplate = template.Must(template.
+	New("sitecustomize").
+	Funcs(template.FuncMap{"pyquote": pyQuote}).
+	Parse(sitecustomizeTmpl))
+
+// sitecustomizeParams is what the startup hook is rendered with. Everything the
+// hook needs is here: it reads nothing else from its surroundings.
+type sitecustomizeParams struct {
+	Argv0Env     string
+	CwdEnv       string
+	LibraryRoots []string
+}
+
+// sitecustomizePy renders the sitecustomize.py that CPython imports at the end
+// of site initialization. It is the one place the interpreter's startup is
+// arranged; see sitecustomize.py.tmpl for what it does.
+//
+// The roots are rendered in as literals rather than read from the environment.
+// The file is generated per sandbox, so what a sandbox may import from is fixed
+// when it is built and is not something a script can reach.
+func sitecustomizePy(roots []string) (string, error) {
+	var b strings.Builder
+	err := sitecustomizeTemplate.Execute(&b, sitecustomizeParams{
+		Argv0Env:     PythonArgv0Env,
+		CwdEnv:       PythonCwdEnv,
+		LibraryRoots: roots,
+	})
+	if err != nil {
+		return "", fmt.Errorf("python: render sitecustomize: %w", err)
+	}
+	return b.String(), nil
+}
+
+// pyQuote renders s as a Python string literal, escaping what would otherwise
+// end the literal or start an escape sequence.
+//
+// A path carrying a character that cannot be printed is refused instead. A
+// newline would end the statement the literal appears in, and the rest would
+// make the generated file unreadable to anyone looking at it to find out what
+// their sandbox does. Both are legal in a POSIX file name and neither appears in
+// a path anyone stages packages under, so refusing them costs nothing.
+func pyQuote(s string) (string, error) {
+	for _, r := range s {
+		if !unicode.IsPrint(r) {
+			return "", fmt.Errorf("python: library root %q contains a non-printable character, which the startup hook cannot carry", s)
+		}
+	}
+	return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(s) + "'", nil
+}
 
 // Invocation represents a single invocation of the Python interpreter.
 type Invocation struct {
@@ -146,14 +202,29 @@ func LibPath(majorMinor string) string { return "/usr/lib/python" + majorMinor }
 // /usr/lib/pythonX.Y. It also installs a sitecustomize.py file and creates an
 // empty site-packages directory.
 //
-// The result is meant to be mounted read-only; the copy exists so that those two
+// libraryRoots are paths in the sandbox filesystem that sitecustomize.py offers
+// to site at startup, in the order given, and only if they exist there when the
+// interpreter runs. Pass [LibraryRoot] for the convention. They are baked into
+// the tree rather than passed per invocation, which is what scopes them to the
+// sandbox this tree belongs to.
+//
+// Declaring a root is not the same as proving it usable: whether an import
+// succeeds is decided at runtime, by what the sandbox filesystem shows then.
+// Only a root that cannot be written into the hook at all — one whose path
+// carries a character a Python literal cannot — is refused here.
+//
+// The result is meant to be mounted read-only; the copy exists so that those
 // additions are possible at all.
-func NewStdlibFS(src fs.FS) (afero.Fs, error) {
+func NewStdlibFS(src fs.FS, libraryRoots ...string) (afero.Fs, error) {
 	tree, err := extractStdlib(src)
 	if err != nil {
 		return nil, fmt.Errorf("python: extract stdlib: %w", err)
 	}
-	if err := afero.WriteFile(tree, "/sitecustomize.py", []byte(sitecustomizePy), 0o644); err != nil {
+	hook, err := sitecustomizePy(libraryRoots)
+	if err != nil {
+		return nil, err
+	}
+	if err := afero.WriteFile(tree, "/sitecustomize.py", []byte(hook), 0o644); err != nil {
 		return nil, fmt.Errorf("python: install sitecustomize: %w", err)
 	}
 	if err := tree.MkdirAll(siteDir, 0o755); err != nil {
@@ -195,6 +266,9 @@ func (e *WazeroInterpreter) Run(ctx context.Context, inv Invocation) (Invocation
 		}
 	}
 
+	// Set after inv.Env, so that a script cannot reach the interpreter's own
+	// bootstrap through the shell environment. The import path beyond this is
+	// Python's own business: sitecustomize.py is what extends it.
 	mod = mod.
 		WithEnv("PYTHONHOME", e.home).
 		WithEnv("PYTHONPATH", e.lib).
