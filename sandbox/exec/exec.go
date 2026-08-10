@@ -58,6 +58,11 @@ const (
 	// exit status. It is the outcome of a success and of an ordinary failure
 	// alike: a script that exits 1, grep finding no match, a command reporting a
 	// bad usage. Nothing stopped the run, so ExitCode is the whole story.
+	//
+	// Only a run that was left to finish reports it. A run the sandbox stopped
+	// reports why it was stopped, whatever status it ended on, so a caller
+	// reading OutcomeCompleted knows the status it is looking at is the request's
+	// own answer.
 	OutcomeCompleted Outcome = iota
 
 	// OutcomeNotFound means a command name did not resolve — it is neither a
@@ -90,10 +95,16 @@ const (
 
 	// OutcomeTimedOut means the run was stopped because its deadline passed.
 	// ExitCode is 137 (128 + SIGKILL), the way a shell reports a killed process.
+	//
+	// It outranks a status, a successful one included: a run whose deadline
+	// passed reports this even when the command it was stopped in returned a
+	// status of its own on the way out. The status is what one command made of
+	// being interrupted; the deadline is why the run ended.
 	OutcomeTimedOut
 
 	// OutcomeCanceled means the run was stopped because the caller's context was
-	// cancelled. ExitCode is 130 (128 + SIGINT).
+	// cancelled. ExitCode is 130 (128 + SIGINT). Like OutcomeTimedOut it outranks
+	// a status the run ended on.
 	OutcomeCanceled
 
 	// OutcomeInvalid means the request could never become a run: a script that
@@ -265,17 +276,46 @@ func (e *NotFoundError) Unwrap() error { return interp.ExitStatus(exitcode.NotFo
 // cancelled. Anything else is a failure of the sandbox: there is no status to go
 // by, so guessing one would be worse than saying so.
 //
+// A run whose context is already done was stopped, and that outranks whatever
+// err is: err is only what the run happened to end on once it was being torn
+// down.
+//
 // ctx is the context the request ran under — the one carrying the deadline, not
 // the caller's, or a run stopped by the sandbox's own timeout would look like a
 // failure of the sandbox.
 func Finish(ctx context.Context, out Output, err error) (*Result, error) {
 	res := &Result{Stdout: out.Stdout, Stderr: out.Stderr, Truncated: out.Truncated}
-	if err == nil {
+
+	// Being stopped is decided first, and from the context rather than from err:
+	// a deadline and a cancellation are limits the caller asked for, so they
+	// belong in the result with a nil error, the same way a non-zero exit does.
+	//
+	// A run that did not finish still ends on something, and what that something
+	// is depends on what the sandbox happened to be running: the shell reports
+	// the context's own error, but a command that watches for cancellation
+	// returns a status of its own — including a zero one, which the shell has no
+	// error to represent at all. Taking that status at face value would report
+	// the run as having completed and hide the timeout entirely, leaving a caller
+	// unable to tell "it failed" from "we never let it finish", or worse, calling
+	// an interrupted run a success. The context is the one witness that does not
+	// depend on which command noticed first.
+	switch {
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(ctx.Err(), context.DeadlineExceeded):
+		res.ExitCode, res.Outcome = exitcode.Timeout, OutcomeTimedOut
+		return res, nil
+	case errors.Is(err, context.Canceled), errors.Is(ctx.Err(), context.Canceled):
+		res.ExitCode, res.Outcome = exitcode.Canceled, OutcomeCanceled
 		return res, nil
 	}
 
-	// A name that did not resolve is checked first: it carries a status of 127,
-	// which on its own says nothing about where the 127 came from.
+	if err == nil {
+		// The run finished on its own before anything stopped it, so it exited
+		// zero however little time it had left.
+		return res, nil
+	}
+
+	// A name that did not resolve is checked before the status it carries: that
+	// status is 127, which on its own says nothing about where the 127 came from.
 	var notFound *NotFoundError
 	if errors.As(err, &notFound) {
 		res.ExitCode, res.Outcome = exitcode.NotFound, OutcomeNotFound
@@ -284,18 +324,6 @@ func Finish(ctx context.Context, out Output, err error) (*Result, error) {
 
 	if code, ok := statusOf(err); ok {
 		res.ExitCode, res.Outcome = code, OutcomeCompleted
-		return res, nil
-	}
-
-	// A deadline and a cancellation are limits the caller asked for, not faults:
-	// they belong in the result with a nil error, the same way a non-zero exit
-	// does.
-	switch {
-	case errors.Is(err, context.DeadlineExceeded), errors.Is(ctx.Err(), context.DeadlineExceeded):
-		res.ExitCode, res.Outcome = exitcode.Timeout, OutcomeTimedOut
-		return res, nil
-	case errors.Is(err, context.Canceled), errors.Is(ctx.Err(), context.Canceled):
-		res.ExitCode, res.Outcome = exitcode.Canceled, OutcomeCanceled
 		return res, nil
 	}
 

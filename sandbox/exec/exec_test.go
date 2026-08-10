@@ -160,6 +160,43 @@ func TestFinishClassifiesAStoppedContext(t *testing.T) {
 	}
 }
 
+// TestFinishPrefersBeingStoppedOverAStatusTheRunEndedOn pins which of the two
+// wins when a run that was stopped still ends on a status. A command that
+// watches its context and returns an exit code on the way out is well behaved,
+// and taking that code at face value would report the run as having completed:
+// the timeout would vanish, and a caller would be left unable to tell a request
+// that failed from one it never let finish.
+func TestFinishPrefersBeingStoppedOverAStatusTheRunEndedOn(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{"a status from the shell backend", interp.ExitStatus(3)},
+		{"a status a command carries", command.Exit(3, "interrupted")},
+		{"a name that did not resolve", &exec.NotFoundError{Name: "nope"}},
+		// The worst of the lot: a command that exits zero on the way out leaves
+		// no error at all, so a run that never finished would read as a success.
+		{"nothing at all", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 0)
+			t.Cleanup(cancel)
+
+			res, err := exec.Finish(ctx, exec.Output{}, tc.err)
+
+			require.NoError(t, err, "being stopped is not a failure of the sandbox")
+			assert.Equal(t, exec.OutcomeTimedOut, res.Outcome)
+			assert.Equal(t, 137, res.ExitCode)
+			assert.True(t, res.Stopped())
+		})
+	}
+}
+
 // TestNotFoundErrorIsAStatusToTheShellAndAFactToTheCaller pins the two things
 // the error dispatch returns for an unresolved name has to be at once. Being a
 // 127 to the shell backend is what lets a script go on past it; being a distinct
