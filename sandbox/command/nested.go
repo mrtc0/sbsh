@@ -57,12 +57,15 @@ type NestedRequest struct {
 	// what a command that just wants "run this here" leaves it as.
 	Dir string
 
-	// Env are "NAME=value" pairs layered on top of the environment the caller
-	// sees, so a request sets what it cares about rather than restating the
-	// whole environment. A name already set is overridden for the child alone.
+	// Env are the "NAME=value" pairs the child's script reads. A child does not
+	// inherit the caller's environment: a variable the script needs is named
+	// here or it is unset. That is what keeps a nested run dependent on the
+	// request rather than on whatever the calling shell happens to hold.
 	//
-	// PWD and OLDPWD are the exception: they describe where the child runs, so
-	// the sandbox sets them from Dir and an entry naming either is dropped.
+	// Two variables come without asking. HOME is the caller's, because a script
+	// has no other way to find it, and PWD is derived from Dir. Both are the
+	// sandbox's to set: an entry naming PWD or OLDPWD is dropped, so PWD cannot
+	// disagree with where the child runs and OLDPWD starts unset.
 	Env []string
 
 	// Timeout bounds the child on top of whatever time the caller's own

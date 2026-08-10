@@ -227,19 +227,50 @@ func TestNestedRunRefusesADirectoryThePolicyCovers(t *testing.T) {
 	assert.Contains(t, res.Stderr, "permission denied")
 }
 
-func TestNestedRunInheritsTheCallersEnvironment(t *testing.T) {
+func TestNestedRunTakesItsEnvironmentFromTheRequest(t *testing.T) {
 	t.Parallel()
 
+	// The caller has a variable of its own and passes on one of its own
+	// choosing. Only the second reaches the child: a script reads what the
+	// request names, not what the calling shell happens to be carrying.
 	p := &nestedProbe{build: func(*command.Invocation) command.NestedRequest {
 		return command.NestedRequest{
-			Script: "echo $INHERITED $OVERRIDDEN $ADDED",
-			Env:    []string{"OVERRIDDEN=child", "ADDED=new"},
+			Script: `echo "left=[$LEFT_BEHIND] passed=[$PASSED_ON]"`,
+			Env:    []string{"PASSED_ON=explicit"},
 		}
 	}}
-	res := runProbe(t, p, "export INHERITED=outer OVERRIDDEN=outer; probe")
+	res := runProbe(t, p, "export LEFT_BEHIND=outer; probe")
 
 	require.NoError(t, p.err)
-	assert.Equal(t, "outer child new\n", res.Stdout)
+	assert.Equal(t, "left=[] passed=[explicit]\n", res.Stdout)
+}
+
+func TestNestedRunGetsHomeAndPwdWithoutAsking(t *testing.T) {
+	t.Parallel()
+
+	// The two exceptions to the rule above, and the only ones: a script has no
+	// other way to find the home directory, and PWD says where it is.
+	p := &nestedProbe{build: func(*command.Invocation) command.NestedRequest {
+		return command.NestedRequest{Script: `echo "home=[$HOME] pwd=[$PWD]"`}
+	}}
+	res := runProbe(t, p, "mkdir -p /work && cd /work && probe", WithEnv("HOME", "/home/someone"))
+
+	require.NoError(t, p.err)
+	assert.Equal(t, "home=[/home/someone] pwd=[/work]\n", res.Stdout)
+}
+
+func TestNestedRunSeesTheCallersHomeAsItStands(t *testing.T) {
+	t.Parallel()
+
+	// HOME is the caller's, not the sandbox's default: a caller that moved it
+	// has a child that agrees with it.
+	p := &nestedProbe{build: func(*command.Invocation) command.NestedRequest {
+		return command.NestedRequest{Script: `echo "[$HOME]"`}
+	}}
+	res := runProbe(t, p, "export HOME=/home/moved; probe")
+
+	require.NoError(t, p.err)
+	assert.Equal(t, "[/home/moved]\n", res.Stdout)
 }
 
 func TestNestedRunRejectsAnEnvironmentEntryThatIsNotAPair(t *testing.T) {

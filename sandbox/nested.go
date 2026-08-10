@@ -31,10 +31,11 @@ const maxDepth = 8
 // sandbox's shell session; re-entering Exec would deadlock on that session, and
 // running the child in it would let the child's variables and working directory
 // leak into the caller's. A child gets a shell session of its own instead,
-// started from the caller's directory and environment and discarded when it
-// ends. Everything outside the session — the mounts, the deny patterns, the
-// network policy, the registered commands — is the sandbox's and is therefore
-// shared, which is what keeps a child on the same capability boundary.
+// started where the caller stands, with only the environment the request asks
+// for, and discarded when it ends. Everything outside the session — the mounts,
+// the deny patterns, the network policy, the registered commands — is the
+// sandbox's and is therefore shared, which is what keeps a child on the same
+// capability boundary.
 type nestedExecutor struct {
 	sandbox *Sandbox
 
@@ -42,10 +43,13 @@ type nestedExecutor struct {
 	// from it in the execution tree.
 	parent exec.Execution
 
-	// dir and env are what the calling command stands in: a request that names
-	// neither runs where the caller does, with what the caller sees.
+	// dir is where the calling command stands: a request that names no directory
+	// runs where the caller does.
 	dir string
-	env []string
+
+	// base is the whole of what a child is given without asking for it. See
+	// [childEnv] for why it is this short.
+	base []string
 }
 
 // nested builds the executor for one invocation. It is what
@@ -57,15 +61,35 @@ func (s *Sandbox) nested(ctx context.Context, inv *command.Invocation) command.N
 	// root is what keeps the depth guard meaningful rather than absent.
 	parent, _ := exec.FromContext(ctx)
 
-	env := s.env
-	if inv.Env != nil {
-		env = inv.Env.All()
-	}
 	dir := inv.Dir
 	if dir == "" {
 		dir = "/"
 	}
-	return &nestedExecutor{sandbox: s, parent: parent, dir: dir, env: env}
+
+	// HOME is where the user's things are, which is as true for a child as for
+	// the caller, and a script has no other way to ask. Everything else the
+	// caller happens to have is left behind; see [childEnv].
+	var base []string
+	if home, ok := lookupEnv(s.env, inv.Env, "HOME"); ok {
+		base = append(base, "HOME="+home)
+	}
+	return &nestedExecutor{sandbox: s, parent: parent, dir: dir, base: base}
+}
+
+// lookupEnv reads one variable as the calling command sees it, falling back to
+// the sandbox's own environment for an invocation built without one.
+func lookupEnv(sandboxEnv []string, inv command.Environ, name string) (string, bool) {
+	if inv != nil {
+		return inv.Lookup(name)
+	}
+	// Last duplicate wins, the same way expand.ListEnviron reads the slice.
+	value, found := "", false
+	for _, kv := range sandboxEnv {
+		if n, v, ok := strings.Cut(kv, "="); ok && n == name {
+			value, found = v, true
+		}
+	}
+	return value, found
 }
 
 // Run evaluates one nested request. It reports back through [exec.Finish], the
@@ -89,7 +113,7 @@ func (e *nestedExecutor) Run(ctx context.Context, req command.NestedRequest) (*e
 	if res != nil || err != nil {
 		return res, err
 	}
-	env, err := childEnv(e.env, req.Env, dir)
+	env, err := childEnv(e.base, req.Env, dir)
 	if err != nil {
 		return exec.Invalid(fmt.Errorf("sandbox: nested environment: %w", err))
 	}
@@ -164,23 +188,24 @@ func (e *nestedExecutor) childDir(reqDir string) (string, *exec.Result, error) {
 	return dir, nil, nil
 }
 
-// childEnv layers the request's variables on top of what the caller sees, so a
-// request states what it cares about rather than the whole environment, and
-// then makes the result agree with dir, where the child actually starts.
+// childEnv builds the environment a child runs with: the short base every child
+// gets, then what the request asks for, then PWD naming dir, where the child
+// actually starts.
 //
-// The two directory variables are the sandbox's to set, not the caller's to
-// pass on. A child that starts somewhere else than the caller stands would
-// otherwise inherit a PWD naming the caller's directory, and OLDPWD is the
-// caller's own history: inheriting it would let "cd -" in a child jump to a
-// directory the child has never been in.
-func childEnv(inherited, overrides []string, dir string) ([]string, error) {
-	env := make([]string, 0, len(inherited)+len(overrides)+1)
-	for _, kv := range inherited {
-		if name, _, _ := strings.Cut(kv, "="); name == "PWD" || name == "OLDPWD" {
-			continue
-		}
-		env = append(env, kv)
-	}
+// The base is short on purpose. A child does not inherit the caller's
+// environment, because a command's environment is a record of everything that
+// has happened to the shell — variables a script exported, values a host passed
+// in for some other command's sake — and handing all of it to a child makes the
+// child's behaviour depend on that history. A request names what its script
+// reads, so the script runs the same way whoever calls it.
+//
+// The directory variables are the sandbox's to set, not the request's to pass:
+// PWD is derived from dir, so it cannot disagree with where the child is, and
+// OLDPWD is left unset because the child has not been anywhere yet — a "cd -"
+// with the caller's OLDPWD would jump somewhere the child has never been.
+func childEnv(base, overrides []string, dir string) ([]string, error) {
+	env := make([]string, 0, len(base)+len(overrides)+1)
+	env = append(env, base...)
 	for _, kv := range overrides {
 		name, _, ok := strings.Cut(kv, "=")
 		if !ok || name == "" {
