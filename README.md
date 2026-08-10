@@ -367,7 +367,9 @@ Per `Exec` call:
   killed process. Both arrive as `Result.ExitCode` with a nil error, and as
   `OutcomeTimedOut` / `OutcomeCanceled`, so the caller can tell "stopped" from
   "failed on its own" without treating a limit it asked for as a sandbox
-  failure.
+  failure. A command that notices the interruption and returns a status of its
+  own does not change that: being stopped is why the run ended, so it is what
+  the outcome says.
 - **Output** — stdout and stderr are captured in memory and capped at 4 MiB each
   by default (`WithOutputLimit`, or `--output-limit` on the CLI). Past the cap,
   output is discarded and `Result.Truncated` is set; the REPL says so on stderr.
