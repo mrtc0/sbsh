@@ -1,9 +1,7 @@
 package repl
 
 import (
-	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -135,13 +133,13 @@ func (r *Runner) exec(ctx context.Context, sb Executor, script string, stdin io.
 //
 // An interrupt delivered through [WithInterrupts] stops the running script and
 // leaves the loop reading. One that arrives while the loop is waiting for input is
-// dropped: interrupting a prompt has nothing to stop, and the read cannot be
-// broken off without closing the input.
+// dropped: interrupting a prompt has no script to stop.
 //
 // When the input is a terminal, line editing and in-session history
-// (up/down arrows) are provided by golang.org/x/term. Otherwise—for example
-// when an agent pipes a script into stdin—it falls back to plain line-by-line
-// reading.
+// (up/down arrows) are provided by golang.org/x/term, and Ctrl-C at the prompt
+// cancels the line being typed rather than ending the session. Otherwise—for
+// example when an agent pipes a script into stdin—it falls back to plain
+// line-by-line reading, where Ctrl-C is not something the input can observe.
 func (r *Runner) Loop(ctx context.Context, sb Executor) int {
 	fmt.Fprintln(r.out, "sbsh REPL (Ctrl-D to exit)")
 
@@ -151,12 +149,12 @@ func (r *Runner) Loop(ctx context.Context, sb Executor) int {
 		}
 		// Raw-mode setup failed; fall through to the plain reader.
 	}
-	return r.loopScanner(ctx, sb)
+	return r.loop(ctx, sb, newScannerSource(r.in, r.out), r.out, r.err)
 }
 
 // loopTerminal drives the REPL with raw-mode line editing and history. It reports
 // handled as false without consuming input if the terminal cannot be put into
-// raw mode, so the caller can fall back to loopScanner.
+// raw mode, so the caller can fall back to the plain reader.
 func (r *Runner) loopTerminal(ctx context.Context, sb Executor, f *os.File) (code int, handled bool) {
 	fd := int(f.Fd())
 	oldState, err := term.MakeRaw(fd)
@@ -165,61 +163,42 @@ func (r *Runner) loopTerminal(ctx context.Context, sb Executor, f *os.File) (cod
 	}
 	defer term.Restore(fd, oldState)
 
-	// Terminal both reads keystrokes and echoes them, so it needs a combined
-	// reader/writer over stdin and stdout.
-	t := term.NewTerminal(struct {
-		io.Reader
-		io.Writer
-	}{r.in, r.out}, "sbsh> ")
-
-	for {
-		if ctx.Err() != nil {
-			fmt.Fprintln(t)
-			return exitCodeTerminated, true
-		}
-
-		line, err := t.ReadLine()
-		if err != nil {
-			if !errors.Is(err, io.EOF) {
-				fmt.Fprintln(t, "read error:", err)
-			}
-			fmt.Fprintln(t)
-			return 0, true
-		}
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		// Asked again after the read, for the reason given in loopScanner.
-		if ctx.Err() != nil {
-			fmt.Fprintln(t)
-			return exitCodeTerminated, true
-		}
-		r.dropPendingInterrupt()
-		// Route output through the terminal so newlines are translated to
-		// CRLF while the terminal is in raw mode.
-		r.exec(ctx, sb, line, nil, t, t)
-	}
+	src := newTerminalSource(r.in, r.out)
+	// Route output through the terminal so newlines are translated to CRLF while
+	// the terminal is in raw mode.
+	t := src.Terminal()
+	return r.loop(ctx, sb, src, t, t), true
 }
 
-// loopScanner reads scripts line by line without terminal features.
-func (r *Runner) loopScanner(ctx context.Context, sb Executor) int {
-	sc := bufio.NewScanner(r.in)
+// loop reads scripts from src and runs them until the input ends or ctx does.
+//
+// A cancelled input is absorbed here rather than turned into an exit, which is
+// what keeps Ctrl-C at the prompt apart from the ways a session really ends.
+func (r *Runner) loop(ctx context.Context, sb Executor, src lineSource, out, errw io.Writer) int {
 	for {
 		if ctx.Err() != nil {
-			fmt.Fprintln(r.out)
+			fmt.Fprintln(out)
 			return exitCodeTerminated
 		}
 
-		fmt.Fprint(r.out, "sbsh> ")
-		if !sc.Scan() {
-			if err := sc.Err(); err != nil {
-				fmt.Fprintln(r.err, "read error:", err)
+		line, kind, err := src.ReadLine()
+		switch kind {
+		case gotInterrupt:
+			// Nothing was submitted and nothing is running, so there is nothing to
+			// stop and no reason to leave: the source has already discarded what was
+			// typed and put a fresh prompt up.
+			r.dropPendingInterrupt()
+			continue
+		case gotEOF:
+			if err != nil {
+				fmt.Fprintln(errw, "read error:", err)
 			}
-			fmt.Fprintln(r.out)
+			fmt.Fprintln(out)
 			return 0
 		}
-		line := strings.TrimSpace(sc.Text())
-		if line == "" {
+
+		script := strings.TrimSpace(line)
+		if script == "" {
 			continue
 		}
 		// Asked again after the read, which is where the loop spends its time. A
@@ -227,11 +206,11 @@ func (r *Runner) loopScanner(ctx context.Context, sb Executor) int {
 		// already over; running it would only produce a script cancelled on the
 		// spot.
 		if ctx.Err() != nil {
-			fmt.Fprintln(r.out)
+			fmt.Fprintln(out)
 			return exitCodeTerminated
 		}
 		r.dropPendingInterrupt()
-		r.exec(ctx, sb, line, nil, r.out, r.err)
+		r.exec(ctx, sb, script, nil, out, errw)
 	}
 }
 

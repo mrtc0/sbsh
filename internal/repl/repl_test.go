@@ -98,6 +98,26 @@ func TestRunner_Loop(t *testing.T) {
 	assert.Equal(t, 4, strings.Count(got, "sbsh> "))
 }
 
+// TestRunner_Loop_pipedInputTreatsCtrlCByteAsData pins that only the
+// interactive path gives Ctrl-C a meaning. Piped input has no terminal to
+// interrupt, so a 0x03 byte in it is part of the script, and the signal handling
+// of a non-interactive session is left as it was.
+func TestRunner_Loop_pipedInputTreatsCtrlCByteAsData(t *testing.T) {
+	t.Parallel()
+
+	var scripts []string
+	exec := &fakeExecutor{run: func(_ context.Context, script string, _ io.Reader) (*sandbox.Result, error) {
+		scripts = append(scripts, script)
+		return &sandbox.Result{}, nil
+	}}
+
+	var out, errBuf bytes.Buffer
+	r := repl.New(strings.NewReader("echo a\x03b\n"), &out, &errBuf)
+
+	assert.Equal(t, 0, r.Loop(context.Background(), exec))
+	assert.Equal(t, []string{"echo a\x03b"}, scripts)
+}
+
 // fakeExecutor runs the function it is given. Deciding what a run does with its
 // context is what lets the interrupt tests below be exact: a real script would
 // have to be slow enough to interrupt, which is a race dressed up as a test.
