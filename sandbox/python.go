@@ -8,6 +8,10 @@ import (
 	"github.com/mrtc0/sbsh/sandbox/python"
 )
 
+// newPythonInterpreter builds the sandbox's Python runtime, with the
+// conventional library root offered to its startup hook. The root is baked into
+// the standard library tree, which is this sandbox's own copy, so what a sandbox
+// may import from cannot reach another sandbox or the host process.
 func newPythonInterpreter(ctx context.Context) (*python.WazeroInterpreter, Option, error) {
 	pyVersion, err := pywasm.MajorMinor()
 	if err != nil {
@@ -17,7 +21,7 @@ func newPythonInterpreter(ctx context.Context) (*python.WazeroInterpreter, Optio
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open embedded stdlib: %w", err)
 	}
-	stdlibFS, err := python.NewStdlibFS(stdlibSrc)
+	stdlibFS, err := python.NewStdlibFS(stdlibSrc, python.LibraryRoot)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create stdlib FS: %w", err)
 	}

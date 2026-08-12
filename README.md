@@ -443,8 +443,39 @@ climbs out with `..` is rejected.
 
 ### Python
 
-`pip` is not available yet, and `site-packages` starts empty. Only pure-Python
-code and the compiled-in extension modules (including zlib) are importable.
+`pip` is not available, and the built-in `site-packages` starts empty. Only
+pure-Python code and the compiled-in extension modules (including zlib) are
+importable.
+
+Third-party pure-Python packages come from the host, as a directory it prepares
+and the sandbox imports from. `sbsh` never installs anything: preparation happens
+outside, with whatever tool the host already uses.
+
+```console
+$ python -m pip install --target ./vendor/python attrs
+$ sbsh --mount ./vendor/python:/lib/python/site-packages:ro -c "python -c 'import attrs; print(attrs.__version__)'"
+```
+
+`/lib/python/site-packages` is a convention, not an option: a directory mounted
+there is treated as an ordinary site directory, and one that is not mounted costs
+nothing. There is no flag to go with it, and the Go API uses the same convention
+— `python.LibraryRoot`. `.pth` files in a staged tree are processed the way
+Python processes them anywhere else. The root is scoped to the sandbox it is
+mounted into.
+
+Dependencies are the host's business: `pip install --target` stages the whole
+dependency tree, and whatever it stages is what the sandbox can import; `sbsh`
+resolves nothing. There is no validation pass either — whether an import works is
+settled at import time by what the sandbox filesystem shows then, so a tree that
+a deny pattern hides, or one the host rewrites afterwards, simply fails to
+import.
+
+**Pure-Python only.** Compiled extension modules were built for a host ABI and
+this interpreter cannot load them, so a package that ships one installs cleanly
+with `pip` and then fails to import here, as an ordinary Python import error.
+How it reads depends on how the package reaches for its extension; a compiled
+file sitting next to the module that could not be imported is the thing to look
+for.
 
 ## Limits
 
@@ -480,7 +511,9 @@ Not implemented:
   resource cap. Memory is bounded only by the Wasm runtime's own limits.
 - **Process substitution** (`<(...)`), rejected at parse time because it needs
   host FIFOs. Command substitution, pipelines, and redirections all work.
-- **`pip` and package installation.**
+- **`pip` and package installation.** The host stages a package tree and the
+  sandbox imports from it — see [Python](#python).
+- **Packages with compiled extensions**, for the same reason.
 - **Persistent history** across REPL sessions.
 - **Ctrl-C at an interactive terminal.** Raw mode clears `ISIG`, so the keystroke
   never becomes a signal; the line editor reports it as end of input and the REPL
