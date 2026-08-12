@@ -2,6 +2,7 @@ package repl
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -139,9 +140,10 @@ func (r *Runner) exec(ctx context.Context, sb Executor, script string, stdin io.
 // broken off without closing the input.
 //
 // When the input is a terminal, line editing and in-session history
-// (up/down arrows) are provided by golang.org/x/term. Otherwise—for example
+// (up/down arrows) are provided by golang.org/x/term, and Ctrl-C discards the
+// line being typed rather than ending the session. Otherwise—for example
 // when an agent pipes a script into stdin—it falls back to plain line-by-line
-// reading.
+// reading, where Ctrl-C is the terminal's own business and arrives as a signal.
 func (r *Runner) Loop(ctx context.Context, sb Executor) int {
 	fmt.Fprintln(r.out, "sbsh REPL (Ctrl-D to exit)")
 
@@ -167,24 +169,47 @@ func (r *Runner) loopTerminal(ctx context.Context, sb Executor, f *os.File) (cod
 
 	// Terminal both reads keystrokes and echoes them, so it needs a combined
 	// reader/writer over stdin and stdout.
-	t := term.NewTerminal(struct {
+	rw := struct {
 		io.Reader
 		io.Writer
-	}{r.in, r.out}, "sbsh> ")
+	}{r.in, r.out}
+
+	return r.loopEditor(ctx, sb, rw), true
+}
+
+// loopEditor drives the REPL over a terminal that is already in raw mode. It is
+// separate from [Runner.loopTerminal] so that the editing behaviour—Ctrl-C above
+// all—can be exercised over a pair of pipes instead of a real terminal.
+func (r *Runner) loopEditor(ctx context.Context, sb Executor, rw io.ReadWriter) int {
+	in := &interruptReader{src: rw}
+	t := newTerminal(in, rw, nil)
+	// Kept across the terminals created below so that a Ctrl-C does not cost the
+	// user the lines they have already run.
+	history := t.History
 
 	for {
 		if ctx.Err() != nil {
 			fmt.Fprintln(t)
-			return exitCodeTerminated, true
+			return exitCodeTerminated
 		}
 
 		line, err := t.ReadLine()
+		if errors.Is(err, errInterrupted) {
+			// The line being typed is dropped by dropping the terminal that holds
+			// it: x/term has no way to clear the buffer, and a fresh terminal also
+			// starts back at column zero, which is what makes it redraw the prompt.
+			// The echo goes to the new one for that same reason—writing it to the
+			// old one would repaint the line that was just abandoned.
+			t = newTerminal(in, rw, history)
+			fmt.Fprintln(t, "^C")
+			continue
+		}
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				fmt.Fprintln(t, "read error:", err)
 			}
 			fmt.Fprintln(t)
-			return 0, true
+			return 0
 		}
 		if strings.TrimSpace(line) == "" {
 			continue
@@ -192,13 +217,87 @@ func (r *Runner) loopTerminal(ctx context.Context, sb Executor, f *os.File) (cod
 		// Asked again after the read, for the reason given in loopScanner.
 		if ctx.Err() != nil {
 			fmt.Fprintln(t)
-			return exitCodeTerminated, true
+			return exitCodeTerminated
 		}
 		r.dropPendingInterrupt()
 		// Route output through the terminal so newlines are translated to
 		// CRLF while the terminal is in raw mode.
 		r.exec(ctx, sb, line, nil, t, t)
 	}
+}
+
+// newTerminal returns a line editor over in and out. A history carries over from
+// a terminal that was abandoned; passing nil starts a new one.
+func newTerminal(in io.Reader, out io.Writer, history term.History) *term.Terminal {
+	t := term.NewTerminal(struct {
+		io.Reader
+		io.Writer
+	}{in, out}, "sbsh> ")
+	if history != nil {
+		t.History = history
+	}
+	return t
+}
+
+// ctrlC is the byte a terminal in raw mode delivers for Ctrl-C. Raw mode clears
+// ISIG, so the keystroke never becomes a signal and arrives as ordinary input.
+const ctrlC = 0x03
+
+// errInterrupted reports a Ctrl-C typed at the prompt. It exists because x/term
+// answers Ctrl-C with io.EOF, which is also what it answers Ctrl-D with: the two
+// are indistinguishable by the time the line editor is done with them, and taking
+// both for end of input is what used to end the session.
+var errInterrupted = errors.New("interrupted")
+
+// interruptReader hands input to the line editor with every Ctrl-C removed and
+// reported as [errInterrupted] instead. Intercepting the byte ahead of the editor
+// is what keeps the two meanings apart, and it also spares the editor a keystroke
+// it would otherwise leave in its own buffer, where it would be read again and
+// again by every later ReadLine.
+// maxEmptyReads bounds how many reads that yield nothing at all are tolerated
+// before one is called a broken reader.
+const maxEmptyReads = 100
+
+type interruptReader struct {
+	src io.Reader
+	buf []byte // bytes read from src and not yet handed on
+	arr [256]byte
+	err error // src's error, held back until buf has been handed on
+}
+
+func (r *interruptReader) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	// The retries are what a reader that returns neither bytes nor an error costs
+	// us; the count is there so that one which never returns any is an error
+	// rather than a spin, as it is in bufio.
+	for attempts := 0; len(r.buf) == 0; attempts++ {
+		if r.err != nil {
+			err := r.err
+			r.err = nil
+			return 0, err
+		}
+		if attempts == maxEmptyReads {
+			return 0, io.ErrNoProgress
+		}
+		n, err := r.src.Read(r.arr[:])
+		r.buf, r.err = r.arr[:n], err
+	}
+
+	if r.buf[0] == ctrlC {
+		r.buf = r.buf[1:]
+		return 0, errInterrupted
+	}
+	// Anything up to the next Ctrl-C is ordinary input; the Ctrl-C itself is
+	// reported on the read after this one, once what preceded it has been typed.
+	end := len(r.buf)
+	if i := bytes.IndexByte(r.buf, ctrlC); i > 0 {
+		end = i
+	}
+	n := copy(p, r.buf[:end])
+	r.buf = r.buf[n:]
+	return n, nil
 }
 
 // loopScanner reads scripts line by line without terminal features.

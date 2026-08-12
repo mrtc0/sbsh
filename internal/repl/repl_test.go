@@ -266,6 +266,72 @@ func TestRunner_Loop_interrupts(t *testing.T) {
 	})
 }
 
+// TestRunner_LoopEditor_ctrlC pins what Ctrl-C means at an interactive prompt.
+// Raw mode clears ISIG, so the keystroke is never a signal: it reaches the line
+// editor as a byte, and the REPL has to tell it apart from the end of input that
+// Ctrl-D asks for.
+func TestRunner_LoopEditor_ctrlC(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		keys        string
+		wantScripts []string
+		wantExit    int
+		wantEchoes  int // how many times "^C" is echoed
+	}{
+		"an empty prompt is interrupted and the session goes on": {
+			keys:        "\x03echo one\n",
+			wantScripts: []string{"echo one"},
+			wantEchoes:  1,
+		},
+		"the line being typed is dropped rather than run": {
+			keys:        "echo one\x03echo two\n",
+			wantScripts: []string{"echo two"},
+			wantEchoes:  1,
+		},
+		"one interrupt after another leaves the prompt usable": {
+			keys:        "\x03\x03\x03echo one\n",
+			wantScripts: []string{"echo one"},
+			wantEchoes:  3,
+		},
+		"Ctrl-D still ends the session": {
+			keys:        "echo one\n\x04",
+			wantScripts: []string{"echo one"},
+		},
+		// The up arrow after the interrupt proves the history outlived the
+		// terminal that the interrupt threw away.
+		"the history survives an interrupt": {
+			keys:        "echo one\n\x03\x1b[A\n",
+			wantScripts: []string{"echo one", "echo one"},
+			wantEchoes:  1,
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var scripts []string
+			exec := &fakeExecutor{run: func(_ context.Context, script string, _ io.Reader) (*sandbox.Result, error) {
+				scripts = append(scripts, script)
+				return &sandbox.Result{}, nil
+			}}
+
+			var screen bytes.Buffer
+			rw := struct {
+				io.Reader
+				io.Writer
+			}{strings.NewReader(tc.keys), &screen}
+
+			r := repl.New(strings.NewReader(""), io.Discard, io.Discard)
+
+			assert.Equal(t, tc.wantExit, r.LoopEditor(context.Background(), exec, rw))
+			assert.Equal(t, tc.wantScripts, scripts)
+			assert.Equal(t, tc.wantEchoes, strings.Count(screen.String(), "^C"))
+		})
+	}
+}
+
 // lineReader yields at most one line per Read, the way a pipe fed by a slow
 // producer does. A strings.Reader would let the loop's bufio.Scanner buffer the
 // whole input on its first read, which hides a script that steals the loop's

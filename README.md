@@ -66,8 +66,10 @@ status.
 
 `SIGINT` stops the running script and leaves the REPL at its prompt; `-c` exits
 `130`. `SIGTERM` stops the script and the process, which exits `143`. Either way
-the sandbox is closed on the way out. Pressing Ctrl-C at a terminal is a separate
-matter — see Not implemented below.
+the sandbox is closed on the way out. Pressing Ctrl-C at a terminal discards the
+line being typed and draws a fresh prompt; only Ctrl-D ends the session.
+Interrupting a script that is already running still takes a `SIGINT` from
+elsewhere — see Not implemented below.
 
 ## Using the Go API
 
@@ -515,12 +517,12 @@ Not implemented:
   sandbox imports from it — see [Python](#python).
 - **Packages with compiled extensions**, for the same reason.
 - **Persistent history** across REPL sessions.
-- **Ctrl-C at an interactive terminal.** Raw mode clears `ISIG`, so the keystroke
-  never becomes a signal; the line editor reports it as end of input and the REPL
-  exits, the same as Ctrl-D. A Ctrl-C pressed while a script runs is read once the
-  script finishes, and ends the session then. Sending `SIGINT` from another
-  terminal interrupts the script as described above, and piped input and `-c` are
-  unaffected.
+- **Interrupting a running script with Ctrl-C at an interactive terminal.** Raw
+  mode clears `ISIG`, so the keystroke never becomes a signal, and the REPL is not
+  reading input while a script runs. The keystroke is read once the script
+  finishes, where it cancels the (empty) prompt rather than the script. Sending
+  `SIGINT` from another terminal interrupts the script as described above, and
+  piped input and `-c` are unaffected.
 - **Windows support** is untested; `HostFS` relies on `os.Root` semantics.
 
 ## Security model
