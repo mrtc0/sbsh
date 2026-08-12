@@ -458,55 +458,24 @@ $ sbsh --mount ./vendor/python:/lib/python/site-packages:ro -c "python -c 'impor
 
 `/lib/python/site-packages` is a convention, not an option: a directory mounted
 there is treated as an ordinary site directory, and one that is not mounted costs
-nothing. There is no flag and no `With…` option to go with it, and the Go API
-uses the same convention — `python.LibraryRoot`.
+nothing. There is no flag to go with it, and the Go API uses the same convention
+— `python.LibraryRoot`. `.pth` files in a staged tree are processed the way
+Python processes them anywhere else. The root is scoped to the sandbox it is
+mounted into.
 
-The runtime arranges this in its own startup hook, the `sitecustomize.py` of the
-sandbox's private copy of the standard library, by handing the root to
-`site.addsitedir` — the same call a real `site-packages` goes through. So `.pth`
-files in a staged tree are processed the way Python processes them anywhere
-else, including `.pth` lines that run an import at startup. That code runs inside
-the same sandbox, under the same mounts and the same network policy, as every
-other line of Python here.
-
-Because the root is baked into that private copy, it is scoped to one sandbox: it
-is not process-global Python state, it does not reach the next sandbox, and a
-script cannot add to it. `PYTHONPATH` is the interpreter's bootstrap and is set
-after the script's environment, so exporting it changes nothing.
-
-`sys.path` ends up as: the script's own entry, the standard library, the built-in
-empty `site-packages`, then the mounted tree. It comes last because
-`site.addsitedir` appends and the hook runs at the end of site initialization, so
-a staged package cannot shadow a module the runtime itself provides.
-
-**Mounting a tree declares a root; it does not prove one.** There is no
-validation pass. Whether an import works is settled at import time by what the
-sandbox filesystem shows then — so a tree that a deny pattern hides, or one the
-host rewrites after the sandbox is built, simply fails to import rather than
-failing construction.
+Dependencies are the host's business: `pip install --target` stages the whole
+dependency tree, and whatever it stages is what the sandbox can import; `sbsh`
+resolves nothing. There is no validation pass either — whether an import works is
+settled at import time by what the sandbox filesystem shows then, so a tree that
+a deny pattern hides, or one the host rewrites afterwards, simply fails to
+import.
 
 **Pure-Python only.** Compiled extension modules were built for a host ABI and
 this interpreter cannot load them, so a package that ships one installs cleanly
-with `pip` and then fails to import here. The runtime says nothing of its own
-about that: the failure surfaces as the ordinary Python error it is, and how it
-reads depends on how the package reaches for its extension.
-
-```
-Traceback (most recent call last):
-  File "<string>", line 1, in <module>
-    import greeting
-  File "/lib/python/site-packages/greeting/__init__.py", line 1, in <module>
-    from . import _speedups
-ImportError: cannot import name '_speedups' from partially initialized module
-'greeting' (most likely due to a circular import) (/lib/python/site-packages/greeting/__init__.py)
-```
-
-A compiled file sitting next to the module that could not be imported is the
-thing to look for.
-
-Dependencies are the host's business too. `pip install --target` stages the whole
-dependency tree, and whatever it stages is what the sandbox can import; `sbsh`
-resolves nothing.
+with `pip` and then fails to import here, as an ordinary Python import error.
+How it reads depends on how the package reaches for its extension; a compiled
+file sitting next to the module that could not be imported is the thing to look
+for.
 
 ## Limits
 
