@@ -164,6 +164,11 @@ func Test_grep(t *testing.T) {
 			args:       []string{"-A", "1", "-B", "1", "hit", "f"},
 			wantStdout: "1\nhit\n3\n--\n5\nhit\n7\n",
 		},
+		"two merged ranges and a third apart print one separator": {
+			seed:       map[string]string{"/work/f": "hit\n2\nhit\n4\n5\n6\nhit\n"},
+			args:       []string{"-A", "1", "hit", "f"},
+			wantStdout: "hit\n2\nhit\n4\n--\nhit\n",
+		},
 		"a later match inside the lines already printed adds nothing": {
 			seed:       map[string]string{"/work/f": "hit\nhit\n3\n4\n"},
 			args:       []string{"-A", "2", "hit", "f"},
@@ -189,6 +194,16 @@ func Test_grep(t *testing.T) {
 			args:       []string{"-A1", "hit", "f"},
 			wantStdout: "hit\n3\n",
 		},
+		"-B accepts an attached value": {
+			seed:       map[string]string{"/work/f": "1\nhit\n3\n"},
+			args:       []string{"-B1", "hit", "f"},
+			wantStdout: "1\nhit\n",
+		},
+		"-B combines in a short group": {
+			seed:       map[string]string{"/work/f": "1\n2\nhit\n"},
+			args:       []string{"-nB2", "hit", "f"},
+			wantStdout: "1-1\n2-2\n3:hit\n",
+		},
 		"the last context value wins": {
 			seed:       map[string]string{"/work/f": "1\nhit\n3\n4\n"},
 			args:       []string{"-A", "2", "-A", "1", "hit", "f"},
@@ -205,9 +220,9 @@ func Test_grep(t *testing.T) {
 			wantStdout: "HIT\n3\n",
 		},
 		"context lines carry the file name when it is shown": {
-			seed:         map[string]string{"/work/a": "1\nhit\n3\n", "/work/b": "x\n"},
-			args:         []string{"-A", "1", "hit", "a", "b"},
-			wantContains: []string{"a:hit\na-3\n"},
+			seed:       map[string]string{"/work/a": "1\nhit\n3\n", "/work/b": "x\n"},
+			args:       []string{"-A", "1", "hit", "a", "b"},
+			wantStdout: "a:hit\na-3\n",
 		},
 		"groups in different files are parted by --": {
 			seed:       map[string]string{"/work/a": "hit\n2\n", "/work/b": "hit\n2\n"},
@@ -228,6 +243,11 @@ func Test_grep(t *testing.T) {
 			seed:       map[string]string{"/work/d/a": "1\nhit\n3\n"},
 			args:       []string{"-r", "-A", "1", "hit", "d"},
 			wantStdout: "d/a:hit\nd/a-3\n",
+		},
+		"-r parts the groups of two walked files": {
+			seed:       map[string]string{"/work/d/a": "hit\n2\n", "/work/d/b": "hit\n2\n"},
+			args:       []string{"-r", "-A", "1", "hit", "d"},
+			wantStdout: "d/a:hit\nd/a-2\n--\nd/b:hit\nd/b-2\n",
 		},
 		"context reads from stdin too": {
 			stdin:      "1\nhit\n3\n",
@@ -397,6 +417,12 @@ func Test_grep_recursiveContinuesPastDeniedEntries(t *testing.T) {
 			args:         []string{"-r", "hello", "/work"},
 			wantContains: []string{"a.txt:hello a"},
 			denyStdout:   []string{"SECRET"},
+		},
+		"a denied file between two matches leaves no stray separator": {
+			patterns:     []string{"**/b.txt"},
+			seed:         map[string]string{"/work/a.txt": "hit\n2\n", "/work/b.txt": "hit\n2\n", "/work/c.txt": "hit\n2\n"},
+			args:         []string{"-r", "-A", "1", "hit", "/work"},
+			wantContains: []string{"/work/a.txt:hit\n/work/a.txt-2\n--\n/work/c.txt:hit\n/work/c.txt-2\n"},
 		},
 		"a refusal outranks having found no match": {
 			patterns: []string{"**/.env"},
