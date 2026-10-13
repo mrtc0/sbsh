@@ -64,15 +64,7 @@ func expandLeadingLineCount(args []string) []string {
 
 // isLeadingLineCount reports whether s is "-" followed by one or more ASCII digits.
 func isLeadingLineCount(s string) bool {
-	if len(s) < 2 || s[0] != '-' {
-		return false
-	}
-	for i := 1; i < len(s); i++ {
-		if s[i] < '0' || s[i] > '9' {
-			return false
-		}
-	}
-	return true
+	return len(s) >= 2 && s[0] == '-' && isDecimalDigits(s[1:])
 }
 
 func init() {
