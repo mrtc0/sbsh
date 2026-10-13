@@ -74,6 +74,96 @@ func Test_find(t *testing.T) {
 			args: []string{".", "-name", "*.txt"},
 			want: []string{"./a.txt", "./sub/c.txt"},
 		},
+		"-path matches the whole printed path": {
+			seed: map[string]string{"/work/a.txt": "", "/work/sub/b.txt": "", "/work/sub/c.go": ""},
+			args: []string{".", "-path", "*.txt"},
+			want: []string{"./a.txt", "./sub/b.txt"},
+		},
+		"-path matches the root itself": {
+			seed: map[string]string{"/work/dir/a": ""},
+			args: []string{"dir", "-path", "dir"},
+			want: []string{"dir"},
+		},
+		"-path sees the typed trailing slash": {
+			seed: map[string]string{"/work/dir/a": ""},
+			args: []string{"dir/", "-path", "dir/"},
+			want: []string{"dir/"},
+		},
+		"-path sees the absolute root as typed": {
+			seed: map[string]string{"/work/dir/a": "", "/work/dir/sub/b": ""},
+			args: []string{"/work/dir", "-path", "/work/dir/*/*"},
+			want: []string{"/work/dir/sub/b"},
+		},
+		"-path applies to every root": {
+			seed: map[string]string{"/work/x/a.txt": "", "/work/y/a.txt": "", "/work/y/b.go": ""},
+			args: []string{"x", "y", "-path", "*/a.txt"},
+			want: []string{"x/a.txt", "y/a.txt"},
+		},
+		"-path wildcards cross directory boundaries": {
+			seed: map[string]string{"/work/sub/deep/a.txt": "", "/work/b.txt": ""},
+			args: []string{".", "-path", "./*a.txt"},
+			want: []string{"./sub/deep/a.txt"},
+		},
+		"-path matches leading dots": {
+			seed: map[string]string{"/work/.hidden/a": ""},
+			args: []string{".", "-path", "./*/a"},
+			want: []string{"./.hidden/a"},
+		},
+		"-path must match entirely": {
+			seed: map[string]string{"/work/sub/a.txt": ""},
+			args: []string{".", "-path", "sub"},
+			want: nil,
+		},
+		"-path keeps walking past directories that do not match": {
+			seed: map[string]string{"/work/sub/deep/a.txt": ""},
+			args: []string{".", "-path", "*/deep/a.txt"},
+			want: []string{"./sub/deep/a.txt"},
+		},
+		"-path honours escapes and character classes": {
+			seed: map[string]string{"/work/a*b": "", "/work/axb": "", "/work/a1b": ""},
+			args: []string{".", "-path", `./a\*b`},
+			want: []string{"./a*b"},
+		},
+		"-path character class matches one of a set": {
+			seed: map[string]string{"/work/a1b": "", "/work/axb": ""},
+			args: []string{".", "-path", "./a[0-9]b"},
+			want: []string{"./a1b"},
+		},
+		"-path matches Unicode names": {
+			seed: map[string]string{"/work/\u65e5\u672c\u8a9e/\u30d5\u30a1\u30a4\u30eb.txt": ""},
+			args: []string{".", "-path", "./\u65e5\u672c\u8a9e/*.txt"},
+			want: []string{"./\u65e5\u672c\u8a9e/\u30d5\u30a1\u30a4\u30eb.txt"},
+		},
+		"-path ? matches a single rune": {
+			seed: map[string]string{"/work/\u3042.txt": ""},
+			args: []string{".", "-path", "./?.txt"},
+			want: []string{"./\u3042.txt"},
+		},
+		"-path with an empty pattern matches nothing": {
+			seed: map[string]string{"/work/a": ""},
+			args: []string{".", "-path", ""},
+			want: nil,
+		},
+		"-path takes the last of repeated options": {
+			seed: map[string]string{"/work/a.txt": "", "/work/b.go": ""},
+			args: []string{".", "-path", "*.txt", "-path", "*.go"},
+			want: []string{"./b.go"},
+		},
+		"-path ANDs with -name and -type": {
+			seed:   map[string]string{"/work/sub/x.txt": "", "/work/sub/y.txt": "", "/work/x.txt": ""},
+			mkdirs: []string{"/work/sub/xdir"},
+			args:   []string{".", "-path", "./sub/*", "-name", "x*", "-type", "f"},
+			want:   []string{"./sub/x.txt"},
+		},
+		"errors when -path has no argument": {
+			args:    []string{".", "-path"},
+			wantErr: true,
+		},
+		"errors on an invalid -path pattern": {
+			seed:    map[string]string{"/work/a": ""},
+			args:    []string{".", "-path", "[a-"},
+			wantErr: true,
+		},
 		"errors on an unknown option": {
 			args:    []string{"-bogus"},
 			wantErr: true,
@@ -127,6 +217,12 @@ func Test_find_continuesPastDeniedEntries(t *testing.T) {
 			args:     []string{"/work"},
 			want:     []string{"/work", "/work/a.txt"},
 		},
+		"-path still reports a denied entry and keeps its siblings": {
+			patterns: []string{"**/.env"},
+			seed:     map[string]string{"/work/.env": "", "/work/a.txt": "", "/work/sub/b.txt": ""},
+			args:     []string{"/work", "-path", "*.txt"},
+			want:     []string{"/work/a.txt", "/work/sub/b.txt"},
+		},
 	}
 
 	for name, tc := range cases {
@@ -147,6 +243,50 @@ func Test_find_continuesPastDeniedEntries(t *testing.T) {
 			assert.Equal(t, tc.want, lines(stdout.String()))
 			assert.Contains(t, stderr.String(), "find:")
 			assert.Contains(t, stderr.String(), "permission denied")
+		})
+	}
+}
+
+// -path is matched against the printed name as a whole, so the matcher is
+// tested directly for names a line-oriented assertion cannot express.
+func Test_find_compilePathPattern(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		pattern string
+		name    string
+		want    bool
+	}{
+		"* matches a newline in a name":       {pattern: "./*", name: "./a\nb", want: true},
+		"? matches a newline in a name":       {pattern: "./a?b", name: "./a\nb", want: true},
+		"a literal newline must match":        {pattern: "./a\nb", name: "./a\nb", want: true},
+		"** is just two stars":                {pattern: "./**/a", name: "./x/y/a", want: true},
+		"extglob is matched literally":        {pattern: "./!(x)", name: "./!(x)", want: true},
+		"extglob does not negate":             {pattern: "./!(x)", name: "./y", want: false},
+		"the match must cover the whole name": {pattern: "sub", name: "./sub/a", want: false},
+		"an empty pattern matches nothing":    {pattern: "", name: ".", want: false},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			re, err := compilePathPattern(tc.pattern)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, re.MatchString(tc.name))
+		})
+	}
+}
+
+func Test_find_compilePathPattern_rejectsBadPatterns(t *testing.T) {
+	t.Parallel()
+
+	for _, pat := range []string{"[", "[a-"} {
+		t.Run(pat, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := compilePathPattern(pat)
+			assert.Error(t, err)
 		})
 	}
 }
