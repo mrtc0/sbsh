@@ -2,6 +2,7 @@ package builtins
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -106,4 +107,176 @@ func Test_head(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_head_leadingLineCount(t *testing.T) {
+	t.Parallel()
+
+	numbered := func(from, to int) string {
+		var b strings.Builder
+		for i := from; i <= to; i++ {
+			fmt.Fprintf(&b, "l%d\n", i)
+		}
+		return b.String()
+	}
+	thirty := numbered(1, 30)
+
+	cases := map[string]struct {
+		seed       map[string]string
+		stdin      string
+		args       []string
+		wantStdout string
+		wantErr    bool
+	}{
+		"-N limits stdin": {
+			stdin:      thirty,
+			args:       []string{"-20"},
+			wantStdout: numbered(1, 20),
+		},
+		"-N limits a file": {
+			seed:       map[string]string{"/work/f": thirty},
+			args:       []string{"-20", "f"},
+			wantStdout: numbered(1, 20),
+		},
+		"-N with explicit stdin operand": {
+			stdin:      thirty,
+			args:       []string{"-3", "-"},
+			wantStdout: numbered(1, 3),
+		},
+		"-N with multiple files prints headers": {
+			seed:       map[string]string{"/work/a": thirty, "/work/b": thirty},
+			args:       []string{"-2", "a", "b"},
+			wantStdout: "==> a <==\nl1\nl2\n\n==> b <==\nl1\nl2\n",
+		},
+		"-0 prints nothing": {
+			seed:       map[string]string{"/work/f": thirty},
+			args:       []string{"-0", "f"},
+			wantStdout: "",
+		},
+		"leading zeros are decimal": {
+			seed:       map[string]string{"/work/f": thirty},
+			args:       []string{"-020", "f"},
+			wantStdout: numbered(1, 20),
+		},
+		"-N larger than the input prints everything": {
+			seed:       map[string]string{"/work/f": "a\nb\n"},
+			args:       []string{"-20", "f"},
+			wantStdout: "a\nb\n",
+		},
+		"later -n wins": {
+			seed:       map[string]string{"/work/f": thirty},
+			args:       []string{"-20", "-n", "2", "f"},
+			wantStdout: numbered(1, 2),
+		},
+		"later combined -nN wins": {
+			seed:       map[string]string{"/work/f": thirty},
+			args:       []string{"-20", "-n2", "f"},
+			wantStdout: numbered(1, 2),
+		},
+		"later negative -n wins": {
+			seed:       map[string]string{"/work/f": thirty},
+			args:       []string{"-20", "-n", "-20", "f"},
+			wantStdout: numbered(1, 10),
+		},
+		"-n -N still excludes the last N lines": {
+			seed:       map[string]string{"/work/f": thirty},
+			args:       []string{"-n", "-20", "f"},
+			wantStdout: numbered(1, 10),
+		},
+		"-- ends options so -N is a file name": {
+			seed:       map[string]string{"/work/-20": "x\ny\n"},
+			args:       []string{"--", "-20"},
+			wantStdout: "x\ny\n",
+		},
+		"-N then -- then a numeric file name": {
+			seed:       map[string]string{"/work/-20": thirty},
+			args:       []string{"-3", "--", "-20"},
+			wantStdout: numbered(1, 3),
+		},
+		"huge -N overridden by a later -n is accepted": {
+			seed:       map[string]string{"/work/f": thirty},
+			args:       []string{"-99999999999999999999", "-n1", "f"},
+			wantStdout: "l1\n",
+		},
+		"overflowing -N as the final value is an error": {
+			seed:    map[string]string{"/work/f": thirty},
+			args:    []string{"-99999999999999999999", "f"},
+			wantErr: true,
+		},
+		"-N is only recognised as the first argument": {
+			seed:    map[string]string{"/work/f": thirty},
+			args:    []string{"f", "-20"},
+			wantErr: true,
+		},
+		"-N after another option is an error": {
+			seed:    map[string]string{"/work/f": thirty},
+			args:    []string{"-n3", "-20", "f"},
+			wantErr: true,
+		},
+		"two -N arguments are an error": {
+			seed:    map[string]string{"/work/f": thirty},
+			args:    []string{"-20", "-30", "f"},
+			wantErr: true,
+		},
+		"-20x is not normalised": {
+			args:    []string{"-20x"},
+			wantErr: true,
+		},
+		"-2.0 is not normalised": {
+			args:    []string{"-2.0"},
+			wantErr: true,
+		},
+		"Unicode digits are not normalised": {
+			args:    []string{"-２０"},
+			wantErr: true,
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			inv, stdout, _ := NewTestEnv(t, "/work")
+			for path, body := range tc.seed {
+				mustWrite(t, inv.FS, path, body)
+			}
+			if tc.stdin != "" {
+				inv.Stdin = strings.NewReader(tc.stdin)
+			}
+
+			inv.Args = tc.args
+			err := head(context.Background(), inv)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantStdout, stdout.String(), "stdout")
+		})
+	}
+}
+
+func Test_head_leadingLineCountKeepsArgs(t *testing.T) {
+	t.Parallel()
+
+	inv, _, _ := NewTestEnv(t, "/work")
+	mustWrite(t, inv.FS, "/work/f", "a\nb\nc\n")
+	args := []string{"-1", "f"}
+	inv.Args = args
+
+	require.NoError(t, head(context.Background(), inv))
+	assert.Equal(t, []string{"-1", "f"}, args)
+	assert.Equal(t, []string{"-1", "f"}, inv.Args)
+}
+
+func Test_tailAndParseLineCount_rejectLeadingLineCount(t *testing.T) {
+	t.Parallel()
+
+	inv, _, _ := NewTestEnv(t, "/work")
+	mustWrite(t, inv.FS, "/work/f", "a\nb\nc\n")
+	inv.Args = []string{"-2", "f"}
+	require.Error(t, tail(context.Background(), inv))
+
+	_, _, err := parseLineCount([]string{"-20"}, 10)
+	require.Error(t, err)
 }

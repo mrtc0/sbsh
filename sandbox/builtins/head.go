@@ -9,9 +9,10 @@ import (
 
 // head prints the first n lines (default 10) of each input. A negative n prints
 // all but the last |n| lines, as GNU head does. With no arguments it reads
-// stdin. For multiple files it prefixes each with a "==> name <==" header.
+// stdin. For multiple files it prefixes each with a "==> name <==" header. A
+// leading "-NUM" argument is shorthand for "-n NUM".
 func head(_ context.Context, inv *command.Invocation) error {
-	n, files, err := parseLineCount(inv.Args, 10)
+	n, files, err := parseLineCount(expandLeadingLineCount(inv.Args), 10)
 	if err != nil {
 		return command.Exitf(1, "%v", err)
 	}
@@ -46,6 +47,32 @@ func head(_ context.Context, inv *command.Invocation) error {
 		}
 	}
 	return nil
+}
+
+// expandLeadingLineCount rewrites a first argument of the form -NUM (ASCII
+// digits only) into "-n", "NUM". Any other args are returned unchanged. It
+// returns a new slice and never modifies args or its backing array. NUM is left
+// for parseLineCount to convert, so a later -n still takes precedence.
+func expandLeadingLineCount(args []string) []string {
+	if len(args) == 0 || !isLeadingLineCount(args[0]) {
+		return args
+	}
+	out := make([]string, 0, len(args)+1)
+	out = append(out, "-n", args[0][1:])
+	return append(out, args[1:]...)
+}
+
+// isLeadingLineCount reports whether s is "-" followed by one or more ASCII digits.
+func isLeadingLineCount(s string) bool {
+	if len(s) < 2 || s[0] != '-' {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func init() {
