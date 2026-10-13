@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 
 	"github.com/spf13/afero"
 
@@ -18,7 +19,9 @@ import (
 //	-l print only the names of sources with a match
 //	-E interpret the pattern as an extended regular expression (accepted for
 //	   compatibility; the pattern is always parsed as RE2, which is ERE-compatible)
-//	grep [-cEilnrv] pattern [file...]
+//	-A NUM print NUM lines of trailing context after each selected line
+//	-B NUM print NUM lines of leading context before each selected line
+//	grep [-cEilnrv] [-A NUM] [-B NUM] pattern [file...]
 func grep(_ context.Context, inv *command.Invocation) error {
 	fs := NewFlagSet()
 	ignoreCase := fs.Bool("-i")
@@ -28,13 +31,28 @@ func grep(_ context.Context, inv *command.Invocation) error {
 	countFlag := fs.Bool("-c")
 	listFlag := fs.Bool("-l")
 	_ = fs.Bool("-E") // ERE-compatible already; accepted for compatibility
+	// Repeatable so that every occurrence can be checked, not just the one that
+	// wins: "grep -A x -A 2" is a mistake the user should hear about.
+	afterFlag := fs.StringList("-A")
+	beforeFlag := fs.StringList("-B")
 
 	rest, err := fs.Parse(inv.Args)
 	if err != nil {
 		return command.Exitf(1, "%v", err)
 	}
+	// Both counts are settled before a byte is read, so a bad NUM fails the same
+	// way whether or not the files exist.
+	after, err := contextCount(*afterFlag)
+	if err != nil {
+		return command.Exitf(1, "%v", err)
+	}
+	before, err := contextCount(*beforeFlag)
+	if err != nil {
+		return command.Exitf(1, "%v", err)
+	}
+	withContext := len(*afterFlag) > 0 || len(*beforeFlag) > 0
 	if len(rest) == 0 {
-		return command.Exit(1, "usage: grep [-cEilnrv] pattern [file...]")
+		return command.Exit(1, "usage: grep [-cEilnrv] [-A NUM] [-B NUM] pattern [file...]")
 	}
 
 	pattern := rest[0]
@@ -55,26 +73,75 @@ func grep(_ context.Context, inv *command.Invocation) error {
 	listFiles := *listFlag
 
 	matched := false
+	// Whether any group has been printed yet, kept across sources: the separator
+	// goes between groups wherever they come from, so two files each with a hit
+	// are parted by it, and nothing is printed before the first group or after
+	// the last. A source that produces no output leaves it untouched.
+	groupPrinted := false
+
+	emit := func(name string, i int, line string, selected bool) {
+		// A selected line is joined to its prefix by ":", a context line by "-",
+		// which is how the two are told apart once they are interleaved.
+		sep := "-"
+		if selected {
+			sep = ":"
+		}
+		prefix := ""
+		if withName {
+			prefix += name + sep
+		}
+		if *lineNum {
+			prefix += strconv.Itoa(i+1) + sep
+		}
+		fmt.Fprintln(inv.Stdout, prefix+line)
+	}
+
 	scan := func(name string, b []byte) {
+		lines := splitLines(b)
+		selected := make([]bool, len(lines))
 		n := 0
-		for i, line := range splitLines(b) {
+		for i, line := range lines {
 			if re.MatchString(line) == invert {
 				continue
 			}
 			matched = true
 			n++
-			// -l and -c suppress the per-line output; they report per source below.
-			if listFiles || countOnly {
-				continue
+			selected[i] = true
+		}
+		// -l and -c suppress the per-line output; they report per source below.
+		if !listFiles && !countOnly {
+			// last is the final line already printed for this source. Ranges are
+			// per source: a group never reaches across a file boundary.
+			last := -1
+			for i := range lines {
+				if !selected[i] {
+					continue
+				}
+				// Clamped against the lines that are actually there before the
+				// addition, so a NUM near the top of int cannot wrap around.
+				start, end := 0, len(lines)-1
+				if before < i {
+					start = i - before
+				}
+				if after < len(lines)-1-i {
+					end = i + after
+				}
+				if last >= 0 && start <= last+1 {
+					// Overlapping or touching the lines just printed: the two are
+					// one group, and the shared lines are not repeated.
+					start = last + 1
+					if end < start {
+						continue
+					}
+				} else if withContext && groupPrinted {
+					fmt.Fprintln(inv.Stdout, "--")
+				}
+				for j := start; j <= end; j++ {
+					emit(name, j, lines[j], selected[j])
+				}
+				last = end
+				groupPrinted = true
 			}
-			prefix := ""
-			if withName {
-				prefix += name + ":"
-			}
-			if *lineNum {
-				prefix += fmt.Sprintf("%d:", i+1)
-			}
-			fmt.Fprintln(inv.Stdout, prefix+line)
 		}
 		switch {
 		case listFiles:
@@ -157,6 +224,42 @@ func grep(_ context.Context, inv *command.Invocation) error {
 		return command.Exit(1)
 	}
 	return nil
+}
+
+// contextCount reads the NUM of a context option. Every value given is checked,
+// not only the last, and the last one is what takes effect; with the option
+// absent the count is zero. NUM is a non-negative decimal written in ASCII
+// digits and no wider than an int, so "-1", "1.5", "2x", "" and a number past
+// the int range are each refused rather than quietly reinterpreted.
+func contextCount(vals []string) (int, error) {
+	n := 0
+	for _, v := range vals {
+		if !isDecimalDigits(v) {
+			return 0, fmt.Errorf("%s: invalid context length argument", v)
+		}
+		// The digits are already known good, so the only error left for Atoi to
+		// give is a value too wide for an int.
+		parsed, err := strconv.Atoi(v)
+		if err != nil {
+			return 0, fmt.Errorf("%s: invalid context length argument", v)
+		}
+		n = parsed
+	}
+	return n, nil
+}
+
+// isDecimalDigits reports whether s is one or more ASCII decimal digits and
+// nothing else: no sign, no separators, no other scripts' digits.
+func isDecimalDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func init() {
