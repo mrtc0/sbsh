@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"path"
 	"strings"
+	"sync"
 	"text/template"
 	"unicode"
 
@@ -40,6 +41,13 @@ const siteDir = "/site-packages"
 // the common workflow. The name follows the layout Python itself expects, which
 // is what lets the root be treated as an ordinary site directory.
 const LibraryRoot = "/lib/python/site-packages"
+
+// runtimeMu serializes wazero runtime creation. Creating a runtime reads and,
+// on the first call in the process, writes the package variable version in
+// wazero's internal/version without a lock, so concurrent first calls race.
+// Only the creation is serialized: compiling and instantiating modules stay
+// concurrent.
+var runtimeMu sync.Mutex
 
 //go:embed sitecustomize.py.tmpl
 var sitecustomizeTmpl string
@@ -179,8 +187,7 @@ func NewWazeroInterpreter(ctx context.Context, cfg Config) (*WazeroInterpreter, 
 		lib = LibPath(cfg.MajorMinor)
 	}
 
-	rt := wazero.NewRuntimeWithConfig(ctx,
-		wazero.NewRuntimeConfig().WithCloseOnContextDone(true))
+	rt := newRuntime(ctx)
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, rt); err != nil {
 		rt.Close(ctx)
 		return nil, fmt.Errorf("python: instantiate wasi_snapshot_preview1: %w", err)
@@ -192,6 +199,13 @@ func NewWazeroInterpreter(ctx context.Context, cfg Config) (*WazeroInterpreter, 
 		return nil, fmt.Errorf("python: compile python.wasm: %w", err)
 	}
 	return &WazeroInterpreter{runtime: rt, compiled: compiled, home: home, lib: lib}, nil
+}
+
+func newRuntime(ctx context.Context) wazero.Runtime {
+	runtimeMu.Lock()
+	defer runtimeMu.Unlock()
+	return wazero.NewRuntimeWithConfig(ctx,
+		wazero.NewRuntimeConfig().WithCloseOnContextDone(true))
 }
 
 // LibPath returns the default path to the Python standard library for the given major.minor version.
