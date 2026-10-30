@@ -198,3 +198,39 @@ func TestTar_ReportsSymlinkItCannotStore(t *testing.T) {
 	require.NoError(t, tarCommand(context.Background(), inv))
 	assert.ElementsMatch(t, []string{"sub/", "sub/b.txt"}, strings.Fields(stdout.String()))
 }
+
+// zip stores no links either: unzip could not recreate one, so the member is
+// reported and the rest archived.
+func TestZip_ReportsSymlinkItCannotStore(t *testing.T) {
+	t.Parallel()
+
+	inv, hostDir, _, stderr := NewTestEnvWithHostMount(t, "zip")
+	seedLinkTree(t, hostDir)
+
+	inv.Args = []string{"-rq", "/work/a.zip", "sub", "dirlink"}
+	err := zipCommand(context.Background(), inv)
+	require.Error(t, err)
+	assert.Equal(t, &command.ExitError{Code: zipExitPartial}, err)
+	assert.Contains(t, stderr.String(), "zip: /work/sub/blink: symbolic link not archived")
+	assert.Contains(t, stderr.String(), "zip: /work/dirlink: symbolic link not archived")
+
+	b, err := os.ReadFile(filepath.Join(hostDir, "a.zip"))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"sub/", "sub/b.txt"}, zipMemberNames(t, string(b)))
+}
+
+// unzip writes through os.Root like every other command, so a link already in
+// the destination cannot carry a member out of the mount.
+func TestUnzip_DoesNotWriteThroughLinkOutOfMount(t *testing.T) {
+	t.Parallel()
+
+	inv, hostDir, _, _ := NewTestEnvWithHostMount(t, "unzip")
+	outside := t.TempDir()
+	require.NoError(t, os.Symlink(outside, filepath.Join(hostDir, "out")))
+	require.NoError(t, os.WriteFile(filepath.Join(hostDir, "in.zip"),
+		[]byte(hostileZip(t, zipFixture{name: "out/escape.txt", body: "x"})), 0o644))
+
+	inv.Args = []string{"-q", "in.zip"}
+	require.Error(t, unzipCommand(context.Background(), inv))
+	assert.NoFileExists(t, filepath.Join(outside, "escape.txt"))
+}

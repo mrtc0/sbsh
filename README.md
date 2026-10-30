@@ -425,9 +425,9 @@ The rest are written in this repository on top of the Go standard library, each
 covering a subset of the flags its original accepts:
 
 `curl`, `sed`, `grep`, `diff`, `patch`, `tar`, `gzip`, `gunzip`, `zcat`,
-`base64`, `md5sum`, `sha1sum`, `sha256sum`, `cat`, `head`, `tail`, `wc`, `cut`,
-`sort`, `uniq`, `tee`, `seq`, `ls`, `find`, `cp`, `mv`, `rm`, `mkdir`, `touch`,
-`basename`, `dirname`
+`zip`, `unzip`, `base64`, `md5sum`, `sha1sum`, `sha256sum`, `cat`, `head`,
+`tail`, `wc`, `cut`, `sort`, `uniq`, `tee`, `seq`, `ls`, `find`, `cp`, `mv`, `rm`,
+`mkdir`, `touch`, `basename`, `dirname`
 
 `sed` and `grep` use Go's `regexp` package, so patterns are RE2: backreferences
 and lookahead are unavailable.
@@ -437,9 +437,28 @@ looked up on the host. A script that ends there reports `OutcomeNotFound`, while
 one that handles it and picks its own status reports that status. An unsupported
 flag is an error rather than a silent no-op.
 
-`tar` and `patch` treat archive and patch member names as untrusted: a leading
-`/` is dropped so the member lands under the extraction root, and a name that
-climbs out with `..` is rejected.
+`tar`, `unzip`, and `patch` treat archive and patch member names as untrusted: a
+leading `/` is dropped so the member lands under the extraction root, and a name
+that climbs out with `..` is rejected. `tar` checks members as it streams them, so
+a rejection leaves the members before it in place; `unzip` checks the whole
+archive before writing anything.
+
+`zip` and `unzip` cover the everyday subset of Info-ZIP:
+
+- `zip [-rjq] archive file...` creates or updates an archive (`-` writes it to
+  stdout). Members are stored or deflated, whichever is smaller.
+- `unzip [-lpqon] [-d dir] archive [member...]` lists, prints, or extracts.
+  Member operands are exact names or `path.Match` patterns, so `*` does not cross
+  `/` as it does in Info-ZIP.
+- There is no terminal to prompt on, so `unzip` refuses to replace an existing
+  file, or one an earlier member of the same archive wrote, unless `-o`
+  (overwrite) or `-n` (keep) is given.
+- Symbolic links are neither archived nor extracted: the member is reported and
+  skipped, and the exit status says so. A missing `zip` operand exits `18`
+  rather than Info-ZIP's `0`.
+- Not supported: encryption, compression methods other than store and deflate
+  (refused before anything is written), split and self-extracting archives,
+  `-x`/`-i` filters, and compression levels.
 
 ### Python
 
