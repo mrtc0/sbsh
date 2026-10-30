@@ -234,3 +234,48 @@ func TestUnzip_DoesNotWriteThroughLinkOutOfMount(t *testing.T) {
 	require.Error(t, unzipCommand(context.Background(), inv))
 	assert.NoFileExists(t, filepath.Join(outside, "escape.txt"))
 }
+
+// Under an existing link alias -> real, "real/x" and "alias/x" are one file.
+// unzip treats the second as a conflict with the first, as it would two members
+// with the same name: refused by default, kept with -n, replaced with -o.
+func TestUnzip_MembersReachingOneFileThroughLinkConflict(t *testing.T) {
+	t.Parallel()
+
+	archive := hostileZip(t,
+		zipFixture{name: "real/x", body: "first"},
+		zipFixture{name: "alias/x", body: "second"})
+
+	tests := []struct {
+		name    string
+		flags   []string
+		wantErr bool
+		want    string // contents of real/x, or "" for absent
+	}{
+		{name: "refused without -o or -n", wantErr: true},
+		{name: "-n keeps the first", flags: []string{"-n"}, want: "first"},
+		{name: "-o lets the last win", flags: []string{"-o"}, want: "second"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			inv, hostDir, _, _ := NewTestEnvWithHostMount(t, "unzip")
+			require.NoError(t, os.Mkdir(filepath.Join(hostDir, "real"), 0o755))
+			require.NoError(t, os.Symlink("real", filepath.Join(hostDir, "alias")))
+			require.NoError(t, os.WriteFile(filepath.Join(hostDir, "in.zip"), []byte(archive), 0o644))
+
+			inv.Args = append(tt.flags, "-q", "in.zip")
+			err := unzipCommand(context.Background(), inv)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "alias/x: already exists")
+				assert.NoFileExists(t, filepath.Join(hostDir, "real/x"), "nothing is written")
+				return
+			}
+			require.NoError(t, err)
+			b, err := os.ReadFile(filepath.Join(hostDir, "real/x"))
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, string(b))
+		})
+	}
+}

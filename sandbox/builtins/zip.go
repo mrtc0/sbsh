@@ -13,7 +13,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/spf13/afero"
 
@@ -194,6 +196,11 @@ func (b *zipBuilder) addEntry(arg, root, p string, info os.FileInfo) error {
 		return err
 	}
 	hdr.Name = name
+	// CreateRaw, unlike CreateHeader, leaves the flags as given, so the UTF-8
+	// bit is set here. Without it a reader takes a non-ASCII name as CP437.
+	if !isASCII(name) && utf8.ValidString(name) {
+		hdr.Flags |= zipFlagUTF8
+	}
 	e := &zipEntry{src: p, hdr: hdr}
 	if !info.IsDir() {
 		raw, err := afero.ReadFile(b.inv.FS, p)
@@ -212,6 +219,18 @@ func (b *zipBuilder) addEntry(arg, root, p string, info os.FileInfo) error {
 	b.entries = append(b.entries, e)
 	b.byName[name] = e
 	return nil
+}
+
+// zipFlagUTF8 is general purpose bit 11: the name is UTF-8 rather than CP437.
+const zipFlagUTF8 = 0x800
+
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= utf8.RuneSelf {
+			return false
+		}
+	}
+	return true
 }
 
 // zipEntryName turns a walked display name into an entry name. Names are always
@@ -537,7 +556,10 @@ type unzipTarget struct {
 // fails the extraction with nothing written. A leading "/" is dropped, the way
 // tar and Info-ZIP do.
 func unzipExtract(inv *command.Invocation, members []*zip.File, dest string, policy unzipPolicy, progress io.Writer) (bool, error) {
-	var plan []unzipTarget
+	var plan, dirs []unzipTarget
+	// planned is keyed by the file a write lands on, not by its name: under an
+	// existing link alias -> real, "alias/x" and "real/x" are one file, and the
+	// second member to reach it conflicts with the first.
 	planned := map[string]bool{}
 	skipped := false
 	for _, f := range members {
@@ -559,12 +581,23 @@ func unzipExtract(inv *command.Invocation, members []*zip.File, dest string, pol
 		}
 		if mode.IsDir() {
 			plan = append(plan, unzipTarget{f, target})
+			// A directory that is already there keeps its mode; one this
+			// extraction creates gets the archive's, once its contents are in.
+			if _, err := inv.FS.Stat(target); errors.Is(err, fs.ErrNotExist) && zipHasUnixMode(f) && mode.Perm() != 0 {
+				dirs = append(dirs, unzipTarget{f, target})
+			}
 			continue
 		}
 		if err := checkZipMember(f); err != nil {
 			return false, err
 		}
-		if _, err := inv.FS.Stat(target); err == nil || planned[target] {
+		key := target
+		// A resolution error is left for the write to report: that write
+		// would fail the same way.
+		if real, err := inv.FS.EvalSymlinks(target); err == nil {
+			key = real
+		}
+		if _, err := inv.FS.Stat(target); err == nil || planned[key] {
 			switch policy {
 			case unzipAsk:
 				return false, fmt.Errorf("%s: already exists; use -o to overwrite or -n to keep it", f.Name)
@@ -572,7 +605,7 @@ func unzipExtract(inv *command.Invocation, members []*zip.File, dest string, pol
 				continue
 			}
 		}
-		planned[target] = true
+		planned[key] = true
 		plan = append(plan, unzipTarget{f, target})
 	}
 
@@ -581,7 +614,30 @@ func unzipExtract(inv *command.Invocation, members []*zip.File, dest string, pol
 			return skipped, err
 		}
 	}
+	// Directories are created writable so their contents can go in, and get
+	// their own mode afterwards, deepest first: a parent without write or
+	// search permission would otherwise stop the chmod of what is below it.
+	sort.SliceStable(dirs, func(i, j int) bool {
+		return strings.Count(dirs[i].target, "/") > strings.Count(dirs[j].target, "/")
+	})
+	for _, d := range dirs {
+		if err := inv.FS.Chmod(d.target, d.f.Mode().Perm()); err != nil {
+			return skipped, err
+		}
+	}
 	return skipped, nil
+}
+
+// zipHasUnixMode reports whether a member records Unix permission bits. An
+// archive made on DOS or Windows records only a read-only flag, which
+// archive/zip reads as 0777 for a directory; that is not a mode to apply.
+func zipHasUnixMode(f *zip.File) bool {
+	const creatorUnix, creatorMacOSX = 3, 19
+	switch f.CreatorVersion >> 8 {
+	case creatorUnix, creatorMacOSX:
+		return true
+	}
+	return false
 }
 
 // checkZipMember fails for a member whose contents this unzip cannot read,

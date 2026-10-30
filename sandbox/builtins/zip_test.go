@@ -7,6 +7,7 @@ import (
 	"hash/crc32"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -171,6 +172,35 @@ func Test_zip_updatesExistingArchive(t *testing.T) {
 	zr := mustZipReader(t, archive)
 	assert.Equal(t, "new a", zipMemberBody(t, zr.File[0]))
 	assert.Equal(t, "old b", zipMemberBody(t, zr.File[1]))
+}
+
+// CreateRaw leaves the flags as given, so zip sets the UTF-8 bit itself on a
+// non-ASCII name, for new and updated entries alike; without it a reader such
+// as Python's zipfile decodes the name as CP437.
+func Test_zip_marksUTF8Names(t *testing.T) {
+	t.Parallel()
+
+	inv, _, _ := NewTestEnv(t, "/work")
+	mustWrite(t, inv.FS, "/work/日本語.txt", "v1")
+	mustWrite(t, inv.FS, "/work/café/a.txt", "a")
+	mustWrite(t, inv.FS, "/work/plain.txt", "p")
+
+	inv.Args = []string{"-rq", "out.zip", "日本語.txt", "café", "plain.txt"}
+	require.NoError(t, zipCommand(context.Background(), inv))
+	mustWrite(t, inv.FS, "/work/日本語.txt", "v2")
+	inv.Args = []string{"-q", "out.zip", "日本語.txt"}
+	require.NoError(t, zipCommand(context.Background(), inv))
+
+	flags := map[string]bool{}
+	for _, f := range mustZipReader(t, mustRead(t, inv.FS, "/work/out.zip")).File {
+		flags[f.Name] = f.Flags&zipFlagUTF8 != 0
+	}
+	assert.Equal(t, map[string]bool{
+		"日本語.txt":    true,
+		"café/":      true,
+		"café/a.txt": true,
+		"plain.txt":  false,
+	}, flags)
 }
 
 func Test_zip_refusesToOverwriteNonZip(t *testing.T) {
@@ -515,6 +545,74 @@ func Test_unzip_permissions(t *testing.T) {
 	info, err := inv.FS.Stat("/work/run.sh")
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o755), info.Mode()&(os.ModePerm|os.ModeSetuid))
+}
+
+// A directory gets its mode once its contents are in, so a mode that would
+// stop the extraction writing into it, or chmodding what is below it, still
+// ends up applied.
+func Test_unzip_directoryPermissions(t *testing.T) {
+	t.Parallel()
+
+	inv, hostDir, _, _ := NewTestEnvWithHostMount(t, "unzip")
+	require.NoError(t, os.WriteFile(filepath.Join(hostDir, "in.zip"), []byte(hostileZip(t,
+		zipFixture{name: "private/", mode: os.ModeDir | 0o700},
+		zipFixture{name: "private/ro/", mode: os.ModeDir | 0o500},
+		zipFixture{name: "private/ro/a.txt", body: "alpha", mode: 0o644},
+		zipFixture{name: "sticky/", mode: os.ModeDir | os.ModeSticky | 0o750})), 0o644))
+	require.NoError(t, os.Mkdir(filepath.Join(hostDir, "existing"), 0o755))
+	t.Cleanup(func() { _ = os.Chmod(filepath.Join(hostDir, "private/ro"), 0o755) })
+
+	inv.Args = []string{"-q", "in.zip"}
+	require.NoError(t, unzipCommand(context.Background(), inv))
+
+	for name, want := range map[string]os.FileMode{
+		"private":    0o700,
+		"private/ro": 0o500,
+		"sticky":     0o750,
+	} {
+		info, err := os.Stat(filepath.Join(hostDir, name))
+		require.NoError(t, err)
+		assert.Equal(t, want, info.Mode()&(os.ModePerm|os.ModeSticky), name)
+	}
+	b, err := os.ReadFile(filepath.Join(hostDir, "private/ro/a.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "alpha", string(b))
+}
+
+// A directory that is already there keeps its own mode.
+func Test_unzip_existingDirectoryKeepsItsMode(t *testing.T) {
+	t.Parallel()
+
+	inv, hostDir, _, _ := NewTestEnvWithHostMount(t, "unzip")
+	require.NoError(t, os.Mkdir(filepath.Join(hostDir, "d"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(hostDir, "in.zip"), []byte(hostileZip(t,
+		zipFixture{name: "d/", mode: os.ModeDir | 0o700})), 0o644))
+
+	inv.Args = []string{"-q", "in.zip"}
+	require.NoError(t, unzipCommand(context.Background(), inv))
+	info, err := os.Stat(filepath.Join(hostDir, "d"))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o755), info.Mode().Perm())
+}
+
+// A DOS or Windows archive records no Unix mode; archive/zip reads its
+// directories as 0777, which is not applied.
+func Test_unzip_directoryWithoutUnixModeIsNotChmodded(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	_, err := zw.CreateRaw(&zip.FileHeader{Name: "d/", CreatorVersion: 0, ExternalAttrs: 0x10})
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
+
+	inv, _, _ := NewTestEnv(t, "/work")
+	mustWrite(t, inv.FS, "/work/in.zip", buf.String())
+	inv.Args = []string{"-q", "in.zip"}
+	require.NoError(t, unzipCommand(context.Background(), inv))
+	info, err := inv.FS.Stat("/work/d")
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o755), info.Mode().Perm())
 }
 
 func Test_unzip_checksumMismatchFails(t *testing.T) {

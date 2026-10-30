@@ -451,8 +451,11 @@ archive before writing anything.
   Member operands are exact names or `path.Match` patterns, so `*` does not cross
   `/` as it does in Info-ZIP.
 - There is no terminal to prompt on, so `unzip` refuses to replace an existing
-  file, or one an earlier member of the same archive wrote, unless `-o`
-  (overwrite) or `-n` (keep) is given.
+  file, or one an earlier member of the same archive wrote (also under another
+  name, through an existing symbolic link), unless `-o` (overwrite) or `-n`
+  (keep) is given.
+- A directory `unzip` creates gets the archive's permission bits once its
+  contents are in; a directory that already exists keeps its own.
 - Symbolic links are neither archived nor extracted: the member is reported and
   skipped, and the exit status says so. A missing `zip` operand exits `18`
   rather than Info-ZIP's `0`.
