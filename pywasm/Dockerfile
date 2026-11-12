@@ -1,11 +1,11 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 
 ARG WASI_SDK_VERSION=33
 ARG CPYTHON_TAG=v3.14.6
 ARG ZLIB_TAG=v1.3.2
 ARG WASMTIME_VERSION=47.0.2
 
-FROM debian:bookworm AS builder
+FROM debian:bookworm@sha256:268fb24c39bca92d326dd83ea3abebe4a3f7751c804ffef23bb6d857dd343ff8 AS builder
 ARG WASI_SDK_VERSION
 ARG CPYTHON_TAG
 ARG ZLIB_TAG
