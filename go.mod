@@ -3,7 +3,7 @@ module github.com/mrtc0/sbsh
 go 1.25.0
 
 require (
-	github.com/benhoyt/goawk v1.31.0
+	github.com/benhoyt/goawk v1.32.0
 	github.com/google/uuid v1.6.0
 	github.com/itchyny/gojq v0.12.19
 	github.com/mrtc0/sh/v3 v3.0.0-20260729134303-c613568295a4
